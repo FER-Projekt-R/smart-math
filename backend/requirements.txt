@@ -1,1 +1,8 @@
-// python backend dependencies ovdje
+fastapi
+uvicorn[standard]
+sqlalchemy
+supabase
+python-dotenv
+pydantic
+loguru
+psycopg[binary]

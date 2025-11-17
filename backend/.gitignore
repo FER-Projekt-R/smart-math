@@ -1,0 +1,25 @@
+.env
+.venv/
+venv/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Build / distribucija
+build/
+dist/
+*.egg-info/
+
+# IDE / editor postavke
+.vscode/
+.idea/
+
+# Logovi
+*.log
+
+# Environment fajlovi
+.env
+.env.*
