@@ -8,7 +8,7 @@ def heuristic(acc, avg_time, hints):
     if acc < 0.45 or hints >= 4 or avg_time > 12: return 0
     return 1
 
-def generate(n=5000, seed=42, noise_prob=0.05, balance=0):
+def generate(n=5000, seed=42, noise_prob=0.05, balance=False):
     np.random.seed(seed)
     random.seed(seed)
 
@@ -21,7 +21,7 @@ def generate(n=5000, seed=42, noise_prob=0.05, balance=0):
         avg_time = np.abs(np.random.normal(loc=10.0 + (0.5 - acc) * 10.0, scale=5.0))
         avg_time = float(np.clip(avg_time, 1.0, 120.0))
 
-        # Hintovi sampleani iz Poissonove distribucije s tim da acc utjece na mean (veci acc korelira s manjim brojem hintova)
+        # Hintovi sampleani iz Poissonove distribucije (najcesce manje vrijednosti) s tim da acc utjece na mean (veci acc korelira s manjim brojem hintova)
         hints = np.random.poisson(lam=max(0.1, 1.5 + (0.5 - acc) * 3.0))
         hints = int(min(hints, 10)) # cappano na 10 da nema velikih outliera
 
@@ -65,7 +65,7 @@ if __name__ == '__main__':
     parser.add_argument('--n', type=int, default=5000)
     parser.add_argument('--seed', type=int, default=42)
     parser.add_argument('--noise', type=float, default=0.05)
-    parser.add_argument('--balance', type=int, choices=[0, 1], default=0)
+    parser.add_argument('--balance', action='store_true')
     args = parser.parse_args()
 
     df = generate(n=args.n, seed=args.seed, noise_prob=args.noise, balance=args.balance)
