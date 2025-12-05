@@ -8,3 +8,5 @@ loguru
 psycopg[binary]
 numpy
 pandas
+joblib
+scikit-learn
