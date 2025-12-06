@@ -3,9 +3,35 @@
 import Link from 'next/link';
 import { useState } from 'react';
 
+const EMOJI_OPTIONS = ['🌟', '🐶', '🌈', '🍎', '⚽'];
+
 export default function LoginPage() {
+    const [username, setUsername] = useState('');
+    const [password, setPassword] = useState<string[]>(['', '', '', '']);
+    const [teacherPassword, setTeacherPassword] = useState('');
     const [isTeacherMode, setIsTeacherMode] = useState(false);
 
+    const handleEmojiClick = (emoji: string) => {
+        // Find the first empty slot and fill it
+        const emptyIndex = password.findIndex(p => p === '');
+        if (emptyIndex !== -1) {
+            const newPassword = [...password];
+            newPassword[emptyIndex] = emoji;
+            setPassword(newPassword);
+        }
+    };
+
+    const handlePasswordSlotClick = (index: number) => {
+        // Clear this slot and all slots after it
+        const newPassword = password.map((p, i) => (i >= index ? '' : p));
+        setPassword(newPassword);
+    };
+
+    const clearPassword = () => {
+        setPassword(['', '', '', '']);
+    };
+
+    const isPasswordComplete = password.every(p => p !== '');
     const dashboardPath = isTeacherMode ? '/teacher/dashboard' : '/student/dashboard';
 
     return (
@@ -17,7 +43,109 @@ export default function LoginPage() {
             </div>
 
             <div className="card p-8 sm:p-10 max-w-md w-full relative z-10">
+                {/* Logo/Title */}
+                <div className="text-center mb-8">
+                    <div className="text-6xl mb-3">🧮</div>
+                    <h1 className="text-3xl font-bold mb-1">Smart Math</h1>
+                    <p className="text-gray-500 dark:text-gray-400 text-sm">
+                        {isTeacherMode ? 'Prijava za profesora' : 'Prijava za učenika'}
+                    </p>
+                </div>
 
+                {/* Username Field */}
+                <div className="mb-6">
+                    <label className="block text-sm font-medium mb-2 text-gray-600 dark:text-gray-300">
+                        {isTeacherMode ? '👨‍🏫 Ime profesora' : '👤 Tvoje ime'}
+                    </label>
+                    <input
+                        type="text"
+                        value={username}
+                        onChange={(e) => setUsername(e.target.value)}
+                        placeholder={isTeacherMode ? 'Unesite svoje ime...' : 'Upiši svoje ime...'}
+                        className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 dark:border-gray-700 
+                                   bg-white dark:bg-gray-800 focus:border-indigo-500 dark:focus:border-indigo-400 
+                                   outline-none transition-colors text-lg"
+                    />
+                </div>
+
+                {/* Password Section */}
+                {isTeacherMode ? (
+                    /* Teacher: Normal Password */
+                    <div className="mb-6">
+                        <label className="block text-sm font-medium mb-2 text-gray-600 dark:text-gray-300">
+                            🔐 Lozinka
+                        </label>
+                        <input
+                            type="password"
+                            value={teacherPassword}
+                            onChange={(e) => setTeacherPassword(e.target.value)}
+                            placeholder="Unesite lozinku..."
+                            className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 dark:border-gray-700 
+                                       bg-white dark:bg-gray-800 focus:border-emerald-500 dark:focus:border-emerald-400 
+                                       outline-none transition-colors text-lg"
+                        />
+                    </div>
+                ) : (
+                    /* Student: Emoji Password */
+                    <div className="mb-6">
+                        <label className="block text-sm font-medium mb-2 text-gray-600 dark:text-gray-300">
+                            🔐 Lozinka
+                        </label>
+
+                        {/* Password Slots */}
+                        <div className="flex justify-center gap-3 mb-4">
+                            {password.map((emoji, index) => (
+                                <button
+                                    key={index}
+                                    onClick={() => handlePasswordSlotClick(index)}
+                                    className={`w-14 h-14 sm:w-16 sm:h-16 rounded-xl border-3 text-2xl sm:text-3xl
+                                                flex items-center justify-center transition-all duration-200
+                                                ${emoji
+                                            ? 'border-indigo-400 bg-indigo-50 dark:bg-indigo-900/30 scale-105'
+                                            : 'border-dashed border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800'
+                                        }
+                                                hover:border-indigo-400 cursor-pointer`}
+                                    title={emoji ? 'Klikni za brisanje' : `Polje ${index + 1}`}
+                                >
+                                    {emoji || <span className="text-gray-300 dark:text-gray-600 text-lg">{index + 1}</span>}
+                                </button>
+                            ))}
+                        </div>
+
+                        {/* Clear button */}
+                        {password.some(p => p !== '') && (
+                            <button
+                                onClick={clearPassword}
+                                className="text-sm text-gray-400 hover:text-red-500 transition-colors mb-3 block mx-auto"
+                            >
+                                ✕ Obriši sve
+                            </button>
+                        )}
+
+                        {/* Emoji Selection */}
+                        <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-4">
+                            <p className="text-xs text-gray-400 text-center mb-3">Odaberi emoji za lozinku:</p>
+                            <div className="flex justify-center gap-2 flex-wrap">
+                                {EMOJI_OPTIONS.map((emoji) => (
+                                    <button
+                                        key={emoji}
+                                        onClick={() => handleEmojiClick(emoji)}
+                                        disabled={isPasswordComplete}
+                                        className={`w-12 h-12 sm:w-14 sm:h-14 text-2xl sm:text-3xl rounded-xl 
+                                                    transition-all duration-200 
+                                                    ${isPasswordComplete
+                                                ? 'opacity-40 cursor-not-allowed'
+                                                : 'hover:bg-indigo-100 dark:hover:bg-indigo-900/40 hover:scale-110 active:scale-95 cursor-pointer'
+                                            }
+                                                    bg-white dark:bg-gray-700 shadow-sm border border-gray-200 dark:border-gray-600`}
+                                    >
+                                        {emoji}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                )}
 
                 {/* Login Button */}
                 <Link
