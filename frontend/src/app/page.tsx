@@ -1,28 +1,38 @@
 'use client';
 
-import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
-const EMOJI_OPTIONS = ['🌟', '🐶', '🌈', '🍎', '⚽'];
+import { Spinner } from '@/components';
+import { EMOJI_MAP, PASSWORD_KEYS, getEmoji } from '@/lib/utils';
+// import { useAuthStore } from '@/lib/store'; // Uncomment when backend is ready
 
 export default function LoginPage() {
+    const router = useRouter();
+
+    // Form state - password stores letters (A, B, C, D, E), not emojis
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState<string[]>(['', '', '', '']);
     const [teacherPassword, setTeacherPassword] = useState('');
     const [isTeacherMode, setIsTeacherMode] = useState(false);
 
-    const handleEmojiClick = (emoji: string) => {
-        // Find the first empty slot and fill it
+    // UI state (will be replaced by store state when backend is ready)
+    const [isLoading, setIsLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+
+    // Uncomment when backend is ready:
+    // const { loginAsStudent, loginAsTeacher, isLoading, error, clearError } = useAuthStore();
+
+    const handleEmojiClick = (key: string) => {
         const emptyIndex = password.findIndex(p => p === '');
         if (emptyIndex !== -1) {
             const newPassword = [...password];
-            newPassword[emptyIndex] = emoji;
+            newPassword[emptyIndex] = key; // Store the letter, not the emoji
             setPassword(newPassword);
         }
     };
 
     const handlePasswordSlotClick = (index: number) => {
-        // Clear this slot and all slots after it
         const newPassword = password.map((p, i) => (i >= index ? '' : p));
         setPassword(newPassword);
     };
@@ -31,8 +41,72 @@ export default function LoginPage() {
         setPassword(['', '', '', '']);
     };
 
+    const clearError = () => {
+        setError(null);
+    };
+
     const isPasswordComplete = password.every(p => p !== '');
     const dashboardPath = isTeacherMode ? '/teacher/dashboard' : '/student/dashboard';
+
+    // Validation
+    const validateForm = (): boolean => {
+        if (!username.trim()) {
+            setError('Molimo unesite ime');
+            return false;
+        }
+
+        if (isTeacherMode) {
+            if (!teacherPassword.trim()) {
+                setError('Molimo unesite lozinku');
+                return false;
+            }
+        } else {
+            if (!isPasswordComplete) {
+                setError('Molimo odaberite 4 emoji za lozinku');
+                return false;
+            }
+        }
+
+        return true;
+    };
+
+    // Handle login
+    const handleLogin = async () => {
+        clearError();
+
+        if (!validateForm()) {
+            return;
+        }
+
+        setIsLoading(true);
+
+        try {
+            // ============================================================
+            // TODO: Uncomment this block when backend is ready
+            // ============================================================
+            // let success: boolean;
+            // 
+            // if (isTeacherMode) {
+            //     success = await loginAsTeacher(username, teacherPassword);
+            // } else {
+            //     success = await loginAsStudent(username, password);
+            // }
+            // 
+            // if (success) {
+            //     router.push(dashboardPath);
+            // }
+            // ============================================================
+
+            // Temporary: Simulate loading and navigate directly
+            await new Promise(resolve => setTimeout(resolve, 800));
+            router.push(dashboardPath);
+
+        } catch (err) {
+            setError('Došlo je do greške');
+        } finally {
+            setIsLoading(false);
+        }
+    };
 
     return (
         <main className="min-h-screen flex items-center justify-center p-6 relative overflow-hidden">
@@ -52,6 +126,23 @@ export default function LoginPage() {
                     </p>
                 </div>
 
+                {/* Error Message */}
+                {error && (
+                    <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl">
+                        <div className="flex items-center justify-between">
+                            <p className="text-red-600 dark:text-red-400 text-sm">
+                                ⚠️ {error}
+                            </p>
+                            <button
+                                onClick={clearError}
+                                className="text-red-400 hover:text-red-600 transition-colors"
+                            >
+                                ✕
+                            </button>
+                        </div>
+                    </div>
+                )}
+
                 {/* Username Field */}
                 <div className="mb-6">
                     <label className="block text-sm font-medium mb-2 text-gray-600 dark:text-gray-300">
@@ -62,9 +153,10 @@ export default function LoginPage() {
                         value={username}
                         onChange={(e) => setUsername(e.target.value)}
                         placeholder={isTeacherMode ? 'Unesite svoje ime...' : 'Upiši svoje ime...'}
+                        disabled={isLoading}
                         className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 dark:border-gray-700 
                                    bg-white dark:bg-gray-800 focus:border-indigo-500 dark:focus:border-indigo-400 
-                                   outline-none transition-colors text-lg"
+                                   outline-none transition-colors text-lg disabled:opacity-50 disabled:cursor-not-allowed"
                     />
                 </div>
 
@@ -80,9 +172,10 @@ export default function LoginPage() {
                             value={teacherPassword}
                             onChange={(e) => setTeacherPassword(e.target.value)}
                             placeholder="Unesite lozinku..."
+                            disabled={isLoading}
                             className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 dark:border-gray-700 
                                        bg-white dark:bg-gray-800 focus:border-emerald-500 dark:focus:border-emerald-400 
-                                       outline-none transition-colors text-lg"
+                                       outline-none transition-colors text-lg disabled:opacity-50 disabled:cursor-not-allowed"
                         />
                     </div>
                 ) : (
@@ -94,26 +187,28 @@ export default function LoginPage() {
 
                         {/* Password Slots */}
                         <div className="flex justify-center gap-3 mb-4">
-                            {password.map((emoji, index) => (
+                            {password.map((letter, index) => (
                                 <button
                                     key={index}
                                     onClick={() => handlePasswordSlotClick(index)}
+                                    disabled={isLoading}
                                     className={`w-14 h-14 sm:w-16 sm:h-16 rounded-xl border-3 text-2xl sm:text-3xl
                                                 flex items-center justify-center transition-all duration-200
-                                                ${emoji
+                                                ${letter
                                             ? 'border-indigo-400 bg-indigo-50 dark:bg-indigo-900/30 scale-105'
                                             : 'border-dashed border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800'
                                         }
-                                                hover:border-indigo-400 cursor-pointer`}
-                                    title={emoji ? 'Klikni za brisanje' : `Polje ${index + 1}`}
+                                                hover:border-indigo-400 cursor-pointer
+                                                disabled:opacity-50 disabled:cursor-not-allowed`}
+                                    title={letter ? 'Klikni za brisanje' : `Polje ${index + 1}`}
                                 >
-                                    {emoji || <span className="text-gray-300 dark:text-gray-600 text-lg">{index + 1}</span>}
+                                    {letter ? getEmoji(letter) : <span className="text-gray-300 dark:text-gray-600 text-lg">{index + 1}</span>}
                                 </button>
                             ))}
                         </div>
 
                         {/* Clear button */}
-                        {password.some(p => p !== '') && (
+                        {password.some(p => p !== '') && !isLoading && (
                             <button
                                 onClick={clearPassword}
                                 className="text-sm text-gray-400 hover:text-red-500 transition-colors mb-3 block mx-auto"
@@ -123,23 +218,23 @@ export default function LoginPage() {
                         )}
 
                         {/* Emoji Selection */}
-                        <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-4">
+                        <div className={`bg-gray-50 dark:bg-gray-800/50 rounded-xl p-4 ${isLoading ? 'opacity-50' : ''}`}>
                             <p className="text-xs text-gray-400 text-center mb-3">Odaberi emoji za lozinku:</p>
                             <div className="flex justify-center gap-2 flex-wrap">
-                                {EMOJI_OPTIONS.map((emoji) => (
+                                {PASSWORD_KEYS.map((key) => (
                                     <button
-                                        key={emoji}
-                                        onClick={() => handleEmojiClick(emoji)}
-                                        disabled={isPasswordComplete}
+                                        key={key}
+                                        onClick={() => handleEmojiClick(key)}
+                                        disabled={isPasswordComplete || isLoading}
                                         className={`w-12 h-12 sm:w-14 sm:h-14 text-2xl sm:text-3xl rounded-xl 
                                                     transition-all duration-200 
-                                                    ${isPasswordComplete
+                                                    ${isPasswordComplete || isLoading
                                                 ? 'opacity-40 cursor-not-allowed'
                                                 : 'hover:bg-indigo-100 dark:hover:bg-indigo-900/40 hover:scale-110 active:scale-95 cursor-pointer'
                                             }
                                                     bg-white dark:bg-gray-700 shadow-sm border border-gray-200 dark:border-gray-600`}
                                     >
-                                        {emoji}
+                                        {EMOJI_MAP[key]}
                                     </button>
                                 ))}
                             </div>
@@ -148,23 +243,37 @@ export default function LoginPage() {
                 )}
 
                 {/* Login Button */}
-                <Link
-                    href={dashboardPath}
-                    className={`btn w-full block text-center text-lg py-4
-                                ${isTeacherMode ? 'btn-secondary' : 'btn-primary'}`}
+                <button
+                    onClick={handleLogin}
+                    disabled={isLoading}
+                    className={`btn w-full text-center text-lg py-4 relative
+                                ${isTeacherMode ? 'btn-secondary' : 'btn-primary'}
+                                disabled:opacity-70 disabled:cursor-not-allowed disabled:transform-none`}
                 >
-                    {isTeacherMode ? '👨‍🏫 Prijavi se kao profesor' : '🚀 Prijavi se'}
-                </Link>
+                    {isLoading ? (
+                        <span className="flex items-center justify-center gap-3">
+                            <Spinner />
+                            Prijava u tijeku...
+                        </span>
+                    ) : (
+                        isTeacherMode ? '👨‍🏫 Prijavi se kao profesor' : '🚀 Prijavi se'
+                    )}
+                </button>
 
-                {/* Teacher Mode Toggle - Bottom Right */}
+                {/* Teacher Mode toggle */}
                 <div className="absolute -bottom-16 right-0 flex items-center gap-3">
                     <span className="text-xs text-gray-400">Profesor?</span>
                     <button
-                        onClick={() => setIsTeacherMode(!isTeacherMode)}
+                        onClick={() => {
+                            setIsTeacherMode(!isTeacherMode);
+                            clearError();
+                        }}
+                        disabled={isLoading}
                         className={`relative w-14 h-7 rounded-full transition-all duration-300 
                                     ${isTeacherMode
                                 ? 'bg-emerald-500'
-                                : 'bg-gray-300 dark:bg-gray-600'}`}
+                                : 'bg-gray-300 dark:bg-gray-600'}
+                                    disabled:opacity-50 disabled:cursor-not-allowed`}
                     >
                         <span
                             className={`absolute top-1 w-5 h-5 rounded-full bg-white shadow-md 
@@ -174,8 +283,6 @@ export default function LoginPage() {
                     </button>
                 </div>
             </div>
-
-
         </main>
     );
 }
