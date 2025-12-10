@@ -9,3 +9,8 @@ psycopg[binary]
 python-jose[cryptography]
 passlib[argon2]
 python-multipart
+
+numpy
+pandas
+joblib
+scikit-learn
