@@ -3,7 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
-import { Spinner } from '@/components';
+import { RegisterModal, Spinner } from '@/components';
 import { useAuthStore } from '@/lib/store';
 import { EMOJI_MAP, PASSWORD_KEYS, getEmoji } from '@/lib/utils';
 
@@ -25,9 +25,12 @@ export default function LoginPage() {
     // Form state - password stores letters (A, B, C, D, E), not emojis
     // These letters form the class_code for student login
     const [username, setUsername] = useState('');
-    const [password, setPassword] = useState<string[]>(['', '', '']);
+    const [password, setPassword] = useState<string[]>(['', '', '', '']);
     const [teacherPassword, setTeacherPassword] = useState('');
     const [isTeacherMode, setIsTeacherMode] = useState(false);
+
+    // Registration modal state
+    const [showRegister, setShowRegister] = useState(false);
 
     // Local validation error (separate from API error)
     const [validationError, setValidationError] = useState<string | null>(null);
@@ -281,28 +284,42 @@ export default function LoginPage() {
                 </button>
 
                 {/* Teacher Mode toggle */}
-                <div className="absolute -bottom-16 right-0 flex items-center gap-3">
-                    <span className="text-xs text-gray-400">Profesor?</span>
+                <div className="absolute -bottom-16 right-0 left-0 flex items-center justify-between">
                     <button
-                        onClick={() => {
-                            setIsTeacherMode(!isTeacherMode);
-                            handleClearError();
-                        }}
-                        disabled={isLoading}
-                        className={`relative w-14 h-7 rounded-full transition-all duration-300 
-                                    ${isTeacherMode
-                                ? 'bg-emerald-500'
-                                : 'bg-gray-300 dark:bg-gray-600'}
-                                    disabled:opacity-50 disabled:cursor-not-allowed`}
+                        onClick={() => setShowRegister(true)}
+                        className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
                     >
-                        <span
-                            className={`absolute top-1 w-5 h-5 rounded-full bg-white shadow-md 
-                                        transition-all duration-300
-                                        ${isTeacherMode ? 'left-8' : 'left-1'}`}
-                        />
+                        + Novi korisnik
                     </button>
+                    <div className="flex items-center gap-3">
+                        <span className="text-xs text-gray-400">Profesor?</span>
+                        <button
+                            onClick={() => {
+                                setIsTeacherMode(!isTeacherMode);
+                                handleClearError();
+                            }}
+                            disabled={isLoading}
+                            className={`relative w-14 h-7 rounded-full transition-all duration-300 
+                                        ${isTeacherMode
+                                    ? 'bg-emerald-500'
+                                    : 'bg-gray-300 dark:bg-gray-600'}
+                                        disabled:opacity-50 disabled:cursor-not-allowed`}
+                        >
+                            <span
+                                className={`absolute top-1 w-5 h-5 rounded-full bg-white shadow-md 
+                                            transition-all duration-300
+                                            ${isTeacherMode ? 'left-8' : 'left-1'}`}
+                            />
+                        </button>
+                    </div>
                 </div>
             </div>
+
+            {/* Registration Modal */}
+            <RegisterModal
+                isOpen={showRegister}
+                onClose={() => setShowRegister(false)}
+            />
         </main>
     );
 }

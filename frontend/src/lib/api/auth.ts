@@ -10,6 +10,44 @@ import { api, ApiError } from './client';
 
 const TOKEN_KEY = 'auth_token';
 
+// Request type for registration
+interface RegisterRequest {
+    username: string;
+    role: 'student' | 'teacher';
+    password?: string; // Only for teachers
+}
+
+/**
+ * Register a new user
+ * Calls POST /auth/ with username, role, and optionally password (for teachers)
+ */
+export async function registerUser(
+    data: RegisterRequest
+): Promise<{ success: boolean; error?: string }> {
+    try {
+        await api.post('/auth/', {
+            username: data.username,
+            role: data.role,
+            password: data.role === 'teacher' ? data.password : null,
+        });
+
+        return { success: true };
+    } catch (error) {
+        if (error instanceof ApiError) {
+            return {
+                success: false,
+                error: error.status === 400
+                    ? 'Korisnik s tim imenom već postoji'
+                    : error.message,
+            };
+        }
+        return {
+            success: false,
+            error: 'Registracija nije uspjela. Pokušajte ponovo.',
+        };
+    }
+}
+
 /**
  * Login as a student with class code (emoji password)
  */

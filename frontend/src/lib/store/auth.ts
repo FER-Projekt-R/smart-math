@@ -4,6 +4,7 @@ import {
     loginStudent,
     loginTeacher,
     logout as logoutApi,
+    registerUser,
 } from '@/lib/api';
 import { User } from '@/models';
 import { create } from 'zustand';
@@ -20,6 +21,7 @@ interface AuthState {
     // Actions
     loginAsStudent: (username: string, classCode: string) => Promise<boolean>;
     loginAsTeacher: (username: string, password: string) => Promise<boolean>;
+    register: (username: string, role: 'student' | 'teacher', password?: string) => Promise<boolean>;
     logout: () => void;
     clearError: () => void;
     setLoading: (loading: boolean) => void;
@@ -144,6 +146,32 @@ export const useAuthStore = create<AuthState>()(
                     set({
                         isLoading: false,
                         error: 'Došlo je do greške prilikom prijave',
+                    });
+                    return false;
+                }
+            },
+
+            // Register new user
+            register: async (username: string, role: 'student' | 'teacher', password?: string) => {
+                set({ isLoading: true, error: null });
+
+                try {
+                    const response = await registerUser({ username, role, password });
+
+                    if (response.success) {
+                        set({ isLoading: false, error: null });
+                        return true;
+                    }
+
+                    set({
+                        isLoading: false,
+                        error: response.error || 'Registracija nije uspjela',
+                    });
+                    return false;
+                } catch {
+                    set({
+                        isLoading: false,
+                        error: 'Došlo je do greške prilikom registracije',
                     });
                     return false;
                 }
