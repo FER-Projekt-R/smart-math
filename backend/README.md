@@ -27,6 +27,14 @@ Ovo je FastAPI backend za SmartMath projekt. Backend se spaja na Supabase bazu (
 3. Dodaj .env datoteku:
     DATABASE_URL=postgresql+psycopg://postgres:lozinka@localhost:5432/postgres (priložim točnu negdje privatno)
 
+4. BITNO! Prije pokretanja servera:
+    generiraj dataset i treniraj model -
+        cd model
+        python generate_train_data.py --n 10000
+        python train_mlr.py
+    vrati se u backend direktorij - 
+        cd ..
+
 4. Pokreni server:
     uvicorn app.main:app --reload --port 8000
 
