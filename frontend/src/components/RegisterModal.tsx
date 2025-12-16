@@ -14,7 +14,6 @@ export function RegisterModal({ isOpen, onClose }: RegisterModalProps) {
 
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
-    const [role, setRole] = useState<'student' | 'teacher'>('student');
     const [success, setSuccess] = useState(false);
     const [validationError, setValidationError] = useState<string | null>(null);
 
@@ -24,7 +23,6 @@ export function RegisterModal({ isOpen, onClose }: RegisterModalProps) {
         setSuccess(false);
         setUsername('');
         setPassword('');
-        setRole('student');
         setValidationError(null);
         clearError();
         onClose();
@@ -40,15 +38,15 @@ export function RegisterModal({ isOpen, onClose }: RegisterModalProps) {
             return;
         }
 
-        if (role === 'teacher' && !password.trim()) {
-            setValidationError('Profesori moraju imati lozinku');
+        if (!password.trim()) {
+            setValidationError('Molimo unesite lozinku');
             return;
         }
 
         const result = await register(
             username.trim(),
-            role,
-            role === 'teacher' ? password : undefined
+            'teacher',
+            password
         );
 
         if (result) {
@@ -75,7 +73,7 @@ export function RegisterModal({ isOpen, onClose }: RegisterModalProps) {
                     ✕
                 </button>
 
-                <h2 className="text-xl font-bold mb-4">Registracija</h2>
+                <h2 className="text-xl font-bold mb-4">👨‍🏫 Registracija profesora</h2>
 
                 {/* Success message */}
                 {success ? (
@@ -96,33 +94,6 @@ export function RegisterModal({ isOpen, onClose }: RegisterModalProps) {
                             </div>
                         )}
 
-                        {/* Role selector */}
-                        <div className="mb-4">
-                            <label className="block text-sm font-medium mb-2 text-gray-600 dark:text-gray-300">
-                                Uloga
-                            </label>
-                            <div className="flex gap-2">
-                                <button
-                                    onClick={() => setRole('student')}
-                                    className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors
-                                                ${role === 'student'
-                                            ? 'bg-indigo-500 text-white'
-                                            : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300'}`}
-                                >
-                                    👤 Učenik
-                                </button>
-                                <button
-                                    onClick={() => setRole('teacher')}
-                                    className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors
-                                                ${role === 'teacher'
-                                            ? 'bg-emerald-500 text-white'
-                                            : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300'}`}
-                                >
-                                    👨‍🏫 Profesor
-                                </button>
-                            </div>
-                        </div>
-
                         {/* Username */}
                         <div className="mb-4">
                             <label className="block text-sm font-medium mb-2 text-gray-600 dark:text-gray-300">
@@ -140,32 +111,28 @@ export function RegisterModal({ isOpen, onClose }: RegisterModalProps) {
                             />
                         </div>
 
-                        {/* Password (only for teachers) */}
-                        {role === 'teacher' && (
-                            <div className="mb-4">
-                                <label className="block text-sm font-medium mb-2 text-gray-600 dark:text-gray-300">
-                                    Lozinka
-                                </label>
-                                <input
-                                    type="password"
-                                    value={password}
-                                    onChange={(e) => setPassword(e.target.value)}
-                                    placeholder="Unesite lozinku..."
-                                    disabled={isLoading}
-                                    className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 
-                                               bg-white dark:bg-gray-800 focus:border-emerald-500 dark:focus:border-emerald-400 
-                                               outline-none transition-colors disabled:opacity-50"
-                                />
-                            </div>
-                        )}
+                        {/* Password */}
+                        <div className="mb-4">
+                            <label className="block text-sm font-medium mb-2 text-gray-600 dark:text-gray-300">
+                                Lozinka
+                            </label>
+                            <input
+                                type="password"
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                                placeholder="Unesite lozinku..."
+                                disabled={isLoading}
+                                className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 
+                                           bg-white dark:bg-gray-800 focus:border-emerald-500 dark:focus:border-emerald-400 
+                                           outline-none transition-colors disabled:opacity-50"
+                            />
+                        </div>
 
                         {/* Register button */}
                         <button
                             onClick={handleRegister}
                             disabled={isLoading}
-                            className={`btn w-full text-center py-2
-                                        ${role === 'teacher' ? 'btn-secondary' : 'btn-primary'}
-                                        disabled:opacity-70`}
+                            className="btn btn-secondary w-full text-center py-2 disabled:opacity-70"
                         >
                             {isLoading ? (
                                 <span className="flex items-center justify-center gap-2">
