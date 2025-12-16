@@ -1,14 +1,16 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 
-import { Spinner } from '@/components';
+import { CreateClassroomModal, Spinner } from '@/components';
 import { useAuthStore } from '@/lib/store';
 
 export default function TeacherDashboard() {
     const router = useRouter();
     const { user, isAuthenticated, isHydrated, logout } = useAuthStore();
+
+    const [showCreateClassroom, setShowCreateClassroom] = useState(false);
 
     const students: { id: string; name: string; quizzes: number; avgScore: number }[] = [];
 
@@ -63,11 +65,20 @@ export default function TeacherDashboard() {
             <div className="min-h-screen flex flex-col items-center justify-center p-8 pt-24">
                 <div className="card p-6 sm:p-8 w-full max-w-3xl">
                     {/* Title */}
-                    <div className="mb-6">
-                        <h1 className="text-2xl font-bold mb-1">📚 Moj razred</h1>
-                        <p className="text-gray-500 dark:text-gray-400 text-sm">
-                            Pregled učenika i njihovog napretka
-                        </p>
+                    <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                        <div>
+                            <h1 className="text-2xl font-bold mb-1">📚 Moj razred</h1>
+                            <p className="text-gray-500 dark:text-gray-400 text-sm">
+                                Pregled učenika i njihovog napretka
+                            </p>
+                        </div>
+                        <button
+                            onClick={() => setShowCreateClassroom(true)}
+                            className="btn btn-secondary flex items-center gap-2 !py-2 !px-4"
+                        >
+                            <span className="text-lg">+</span>
+                            <span>Novi razred</span>
+                        </button>
                     </div>
 
                     {/* Students table */}
@@ -129,6 +140,15 @@ export default function TeacherDashboard() {
                     )}
                 </div>
             </div>
+
+            {/* Create Classroom Modal */}
+            <CreateClassroomModal
+                isOpen={showCreateClassroom}
+                onClose={() => setShowCreateClassroom(false)}
+                onSuccess={() => {
+                    // TODO: Refresh classroom list when implemented
+                }}
+            />
         </main>
     );
 }

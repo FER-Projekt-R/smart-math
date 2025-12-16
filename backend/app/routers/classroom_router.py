@@ -30,8 +30,8 @@ def create_new_classroom(request: CreateClassroomRequest,
 
     new_classroom = Classroom(
         class_code=request.class_code,
-        classroom_name = request.classroom_name,
-        teacher_id = current_user.id
+        class_name=request.classroom_name,
+        teacher_id=current_user.id
     )
 
     db.add(new_classroom)
