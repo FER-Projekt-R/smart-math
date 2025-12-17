@@ -1,13 +1,14 @@
 import datetime
 from typing import Annotated
-from backend.app.models.game import Game
-from backend.app.models.users import User
+from ..models.game import Game
+from ..models.users import User
 from fastapi import APIRouter, Depends, HTTPException
 from ..routers.auth import get_current_user
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from ..db import get_db
 import random
+
 
 
 router = APIRouter(prefix="/game", tags=['game'])

@@ -1,6 +1,6 @@
-from typing import Text
+
 from xmlrpc.client import Boolean
-from sqlalchemy import Column, TIMESTAMP, ForeignKey
+from sqlalchemy import Column, ForeignKey, TIMESTAMP, Boolean, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
 import uuid

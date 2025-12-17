@@ -1,7 +1,7 @@
 from jose import jwt, JWTError
-from app.config import SECRET_KEY, ALGORITHM
-from db import SessionLocal
-from models import User
+from ..db import SessionLocal
+from ..models.users import User
+from ..config import settings
 
 
 async def authenticate_socket(environ):
@@ -26,7 +26,11 @@ async def authenticate_socket(environ):
 
 
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = jwt.decode(
+            token,
+            settings.SECRET_KEY,
+            algorithms=[settings.ALGORITHM],
+        )
         user_id = payload.get("id")
         if not user_id:
             return None

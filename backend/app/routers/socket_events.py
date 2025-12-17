@@ -1,10 +1,10 @@
 import datetime
-from backend.app.models.game_players import GamePlayers
-from backend.app.models.users import User
-from backend.app.routers.socket_auth import authenticate_socket
-from db import SessionLocal
-from models import Game
-from app import sio
+from ..models.game_players import GamePlayers
+from ..models.users import User
+from .socket_auth import authenticate_socket
+from ..db import SessionLocal
+from ..models.game import Game
+from app.main import sio
 
 
 @sio.event

@@ -44,5 +44,4 @@ app.include_router(game_router)
 def root():
     return "Backend is running!"
 
-
-import app.socket_events 
+from .routers import socket_events
