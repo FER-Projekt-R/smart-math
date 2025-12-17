@@ -293,7 +293,16 @@ export default function LoginPage() {
                             Prijava u tijeku...
                         </span>
                     ) : (
-                        isTeacherMode ? '👨‍🏫 Prijavi se kao profesor' : '🚀 Prijavi se'
+                        <>
+                        <i className={`fa-solid mr-2 ${
+                            isTeacherMode
+                                ? "fa-chalkboard-user text-black-500"
+                                : "fa-rocket text-pink-500"
+                            }`}
+                        />
+                        {isTeacherMode ? "Prijavi se kao profesor" : "Prijavi se"}
+                        </>
+
                     )}
                 </button>
 
