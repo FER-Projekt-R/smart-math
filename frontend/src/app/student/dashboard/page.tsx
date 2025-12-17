@@ -69,9 +69,6 @@ export default function StudentDashboard() {
 
                     <h1 className="text-2xl font-bold mb-2">Bok, {user.username}!</h1>
 
-                    <p className="text-gray-500 dark:text-gray-400">
-                        Spreman za nove matematičke izazove?
-                    </p>
                 </div>
 
                 <button
