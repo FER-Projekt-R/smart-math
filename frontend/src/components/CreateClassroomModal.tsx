@@ -1,6 +1,7 @@
 'use client';
 
 import { api, ApiError } from '@/lib/api';
+import { passwordToEmojis } from '@/lib/utils';
 import { useState } from 'react';
 import { Spinner } from './ui';
 
@@ -12,21 +13,21 @@ interface CreateClassroomModalProps {
 
 interface CreateClassroomResponse {
     message: string;
-    classroom_id: number;
+    classroom_code: string;
 }
 
 export function CreateClassroomModal({ isOpen, onClose, onSuccess }: CreateClassroomModalProps) {
-    const [classCode, setClassCode] = useState('');
     const [classroomName, setClassroomName] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState(false);
+    const [generatedCode, setGeneratedCode] = useState<string | null>(null);
 
     const handleClose = () => {
-        setClassCode('');
         setClassroomName('');
         setError(null);
         setSuccess(false);
+        setGeneratedCode(null);
         onClose();
     };
 
@@ -38,39 +39,19 @@ export function CreateClassroomModal({ isOpen, onClose, onSuccess }: CreateClass
             return;
         }
 
-        if (!classCode.trim()) {
-            setError('Molimo unesite šifru razreda');
-            return;
-        }
-
-        // Validate class code format (should be like ABCD - 4 letters A-E)
-        const codeRegex = /^[A-E]{4}$/i;
-        if (!codeRegex.test(classCode.trim())) {
-            setError('Šifra razreda mora biti 4 slova (A-E)');
-            return;
-        }
-
         setIsLoading(true);
 
         try {
-            await api.post<CreateClassroomResponse>('/classroom/create', {
-                class_code: classCode.trim().toUpperCase(),
+            const response = await api.post<CreateClassroomResponse>('/classroom/create', {
                 classroom_name: classroomName.trim(),
             });
 
+            setGeneratedCode(response.classroom_code);
             setSuccess(true);
-
-            setTimeout(() => {
-                handleClose();
-                onSuccess?.();
-            }, 1000);
+            onSuccess?.();
         } catch (err) {
             if (err instanceof ApiError) {
-                if (err.message.includes('already exists')) {
-                    setError('Razred s tom šifrom već postoji');
-                } else {
-                    setError(err.message);
-                }
+                setError(err.message);
             } else {
                 setError('Došlo je do greške');
             }
@@ -98,9 +79,25 @@ export function CreateClassroomModal({ isOpen, onClose, onSuccess }: CreateClass
                 {success ? (
                     <div className="text-center py-6">
                         <div className="text-4xl mb-3">✅</div>
-                        <p className="text-green-600 dark:text-green-400 font-medium">
+                        <p className="text-green-600 dark:text-green-400 font-medium mb-4">
                             Razred uspješno kreiran!
                         </p>
+                        {generatedCode && (
+                            <div className="bg-gray-100 dark:bg-gray-800 rounded-lg p-4 mb-4">
+                                <p className="text-sm text-gray-500 dark:text-gray-400 mb-2">
+                                    Šifra razreda:
+                                </p>
+                                <p className="text-4xl tracking-widest mb-2">
+                                    {passwordToEmojis(generatedCode.split(''))}
+                                </p>
+                            </div>
+                        )}
+                        <button
+                            onClick={handleClose}
+                            className="btn btn-secondary w-full text-center py-2"
+                        >
+                            U redu
+                        </button>
                     </div>
                 ) : (
                     <>
@@ -122,32 +119,14 @@ export function CreateClassroomModal({ isOpen, onClose, onSuccess }: CreateClass
                                 type="text"
                                 value={classroomName}
                                 onChange={(e) => setClassroomName(e.target.value)}
-                                placeholder="Unesite naziv razreda..."
+                                placeholder="npr. 5.a ili Matematika 2024"
                                 disabled={isLoading}
-                                className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 
-                                           bg-white dark:bg-gray-800 focus:border-emerald-500 dark:focus:border-emerald-400 
-                                           outline-none transition-colors disabled:opacity-50"
-                            />
-                        </div>
-
-                        {/* Class code */}
-                        <div className="mb-4">
-                            <label className="block text-sm font-medium mb-2 text-gray-600 dark:text-gray-300">
-                                Šifra razreda (4 slova A-E)
-                            </label>
-                            <input
-                                type="text"
-                                value={classCode}
-                                onChange={(e) => setClassCode(e.target.value.slice(0, 4))}
-                                placeholder="Unesite šifru razreda..."
-                                disabled={isLoading}
-                                maxLength={4}
                                 className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 
                                            bg-white dark:bg-gray-800 focus:border-emerald-500 dark:focus:border-emerald-400 
                                            outline-none transition-colors disabled:opacity-50"
                             />
                             <p className="text-xs text-gray-400 mt-1">
-                                Ovu šifru će učenici koristiti za prijavu (emoji lozinka)
+                                Šifra razreda će se automatski generirati
                             </p>
                         </div>
 
@@ -172,4 +151,3 @@ export function CreateClassroomModal({ isOpen, onClose, onSuccess }: CreateClass
         </div>
     );
 }
-
