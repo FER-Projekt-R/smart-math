@@ -101,7 +101,10 @@ export default function TeacherDashboard() {
             <header className="sticky top-0 z-10 p-4 sm:p-6 flex justify-end items-center" style={{ background: 'var(--background)' }}>
                 <div className="flex items-center gap-3 sm:gap-4">
                     <div className="flex items-center gap-2 px-3 py-2 rounded-xl" style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)' }}>
-                        <span className="text-xl">👨‍🏫</span>
+                        <div className="w-10 h-10 flex items-center justify-center rounded-full bg-green-400">
+                            <i className="fa-solid fa-chalkboard-user text-white text-lg" />
+                        </div>
+
                         <span className="font-medium">{user.username}</span>
                     </div>
                     <button
@@ -109,7 +112,8 @@ export default function TeacherDashboard() {
                         className="btn btn-outline flex items-center gap-2 !py-2 !px-4"
                     >
                         <span>Odjava</span>
-                        <span className="text-lg">🚪</span>
+                        <i className="fa-solid fa-door-open text-lg text-brown-500" />
+
                     </button>
                 </div>
             </header>
@@ -126,7 +130,8 @@ export default function TeacherDashboard() {
                             className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 disabled:opacity-50 transition-colors"
                             title="Osvježi"
                         >
-                            <span className={`text-xl ${isLoadingClassrooms ? 'animate-spin' : ''}`}>🔄</span>
+                            <i className={`fa-solid fa-arrows-rotate text-xl text-blue-500 ${isLoadingClassrooms ? "animate-spin" : ""}`}/>
+
                         </button>
                     </div>
 
@@ -190,7 +195,7 @@ export default function TeacherDashboard() {
                                     onClick={() => setShowAddStudents(true)}
                                     className="btn btn-primary flex items-center gap-2 !py-2 !px-4"
                                 >
-                                    <span className="text-lg">👤+</span>
+                                    <i className="fa-solid fa-user-plus text-lg text-black-500" />
                                     <span>Dodaj učenika</span>
                                 </button>
                             </div>

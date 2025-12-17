@@ -44,7 +44,7 @@ export default function StudentDashboard() {
             <header className="absolute top-0 left-0 right-0 p-4 sm:p-6 flex justify-end items-center">
                 <div className="flex items-center gap-3 sm:gap-4">
                     <div className="flex items-center gap-2 px-3 py-2 rounded-xl" style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)' }}>
-                        <span className="text-xl">👤</span>
+                        <i className="fa-solid fa-user-circle text-xl text-sky-500 mr-2" />
                         <span className="font-medium">{user.username}</span>
                     </div>
                     <button
@@ -52,7 +52,7 @@ export default function StudentDashboard() {
                         className="btn btn-outline flex items-center gap-2 !py-2 !px-4"
                     >
                         <span>Odjava</span>
-                        <span className="text-lg">🚪</span>
+                        <i className="fa-solid fa-door-open text-lg text-red-400 ml-2" />
                     </button>
                 </div>
             </header>
@@ -60,18 +60,24 @@ export default function StudentDashboard() {
             {/* Start game */}
             <div className="min-h-screen flex flex-col items-center justify-center p-8">
                 <div className="text-center mb-8">
-                    <div className="text-5xl mb-4">👋</div>
+                    <div className="mb-4 flex justify-center">
+                        <div className="w-16 h-16 flex items-center justify-center rounded-full bg-yellow-300">
+                            <i className="fa-solid fa-face-smile-beam text-white text-3xl" />
+                        </div>
+                    </div>
+
                     <h1 className="text-2xl font-bold mb-2">Bok, {user.username}!</h1>
+
                     <p className="text-gray-500 dark:text-gray-400">
                         Spreman za nove matematičke izazove?
                     </p>
                 </div>
 
-                <button
-                    className="btn btn-primary text-xl px-10 py-4"
-                >
-                    🎮 Započni igru
+                <button className="btn btn-primary text-xl px-10 py-4 flex items-center gap-3">
+                <i className="fa-solid fa-gamepad text-2xl" />
+                Započni igru
                 </button>
+
             </div>
         </main>
     );

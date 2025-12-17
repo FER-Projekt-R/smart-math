@@ -141,8 +141,16 @@ export default function LoginPage() {
             <div className="card p-8 sm:p-10 max-w-md w-full relative z-10 my-auto">
                 {/* Logo/Title */}
                 <div className="text-center mb-8">
-                    <div className="text-6xl mb-3">🧮</div>
-                    <h1 className="text-3xl font-bold mb-1">Smart Math</h1>
+                    <div className="mb-3 flex justify-center">
+                    <div className="w-20 h-20 flex items-center justify-center rounded-2xl bg-gradient-to-br from-purple-500 to-pink-400 shadow-lg">
+                        <i className="fa-solid fa-calculator text-white text-4xl" />
+                    </div>
+                    </div>
+
+                    <h1 className="text-3xl font-bold mb-1 text-purple-600">
+                    Smart Math
+                    </h1>
+
                     <p className="text-gray-500 dark:text-gray-400 text-sm">
                         {isTeacherMode ? 'Prijava za profesora' : 'Prijava za učenika'}
                     </p>
@@ -168,8 +176,10 @@ export default function LoginPage() {
                 {/* Username Field */}
                 <div className="mb-6">
                     <label className="block text-sm font-medium mb-2 text-gray-600 dark:text-gray-300">
-                        {isTeacherMode ? '👨‍🏫 Ime profesora' : '👤 Tvoje ime'}
+                        <i className={`mr-2 fa-solid ${isTeacherMode ? "fa-chalkboard-user" : "fa-user"} text-sky-500`}/>
+                        {isTeacherMode ? "Ime profesora" : "Tvoje ime"}
                     </label>
+
                     <input
                         type="text"
                         value={username}
@@ -187,8 +197,10 @@ export default function LoginPage() {
                     /* Teacher: Normal Password */
                     <div className="mb-6">
                         <label className="block text-sm font-medium mb-2 text-gray-600 dark:text-gray-300">
-                            🔐 Lozinka
+                        <i className="fa-solid fa-lock mr-2 text-yellow-500" />
+                        Lozinka
                         </label>
+
                         <input
                             type="password"
                             value={teacherPassword}
@@ -205,8 +217,10 @@ export default function LoginPage() {
                     /* Student: Emoji Password (Class Code) */
                     <div className="mb-6">
                         <label className="block text-sm font-medium mb-2 text-gray-600 dark:text-gray-300">
-                            🔐 Šifra razreda
+                        <i className="fa-solid fa-key mr-2 text-green-500" />
+                        Šifra razreda
                         </label>
+
 
                         {/* Password Slots */}
                         <div className="flex justify-center gap-3 mb-4">

@@ -13,6 +13,9 @@ export default function RootLayout({
 }>) {
     return (
         <html lang="hr">
+            <head>
+                <script src="https://kit.fontawesome.com/fb536f820a.js" crossOrigin="anonymous"></script>
+            </head>
             <body className="antialiased">
                 {children}
             </body>
