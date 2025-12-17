@@ -119,7 +119,7 @@ export function CreateClassroomModal({ isOpen, onClose, onSuccess }: CreateClass
                                 type="text"
                                 value={classroomName}
                                 onChange={(e) => setClassroomName(e.target.value)}
-                                placeholder="npr. 5.a ili Matematika 2024"
+                                placeholder="Naziv razreda..."
                                 disabled={isLoading}
                                 className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 
                                            bg-white dark:bg-gray-800 focus:border-emerald-500 dark:focus:border-emerald-400 

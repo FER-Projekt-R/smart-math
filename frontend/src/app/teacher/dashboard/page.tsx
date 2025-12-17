@@ -3,7 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 
-import { CreateClassroomModal, Spinner } from '@/components';
+import { AddStudentsModal, CreateClassroomModal, Spinner } from '@/components';
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/lib/store';
 import { passwordToEmojis } from '@/lib/utils';
@@ -20,6 +20,7 @@ export default function TeacherDashboard() {
     const { user, isAuthenticated, isHydrated, logout } = useAuthStore();
 
     const [showCreateClassroom, setShowCreateClassroom] = useState(false);
+    const [showAddStudents, setShowAddStudents] = useState(false);
     const [classrooms, setClassrooms] = useState<Classroom[]>([]);
     const [selectedClassroom, setSelectedClassroom] = useState<Classroom | null>(null);
     const [isLoadingClassrooms, setIsLoadingClassrooms] = useState(true);
@@ -130,8 +131,8 @@ export default function TeacherDashboard() {
                     </div>
 
                     {/* Classroom selector */}
-                    <div className="flex items-center gap-3 mb-6">
-                        {classrooms.length > 0 && (
+                    <div className="flex items-center justify-between gap-3 mb-6">
+                        {classrooms.length > 0 ? (
                             <select
                                 value={selectedClassroom?.id || ''}
                                 onChange={(e) => handleClassroomChange(e.target.value)}
@@ -146,6 +147,8 @@ export default function TeacherDashboard() {
                                     </option>
                                 ))}
                             </select>
+                        ) : (
+                            <div />
                         )}
                         <button
                             onClick={() => setShowCreateClassroom(true)}
@@ -179,9 +182,18 @@ export default function TeacherDashboard() {
                     ) : selectedClassroom ? (
                         /* Selected classroom info */
                         <div className="space-y-2">
-                            <p className="text-gray-600 dark:text-gray-400">
-                                Šifra razreda: <span className="text-xl ml-2">{passwordToEmojis(selectedClassroom.class_code.split(''))}</span>
-                            </p>
+                            <div className="flex items-center justify-between">
+                                <p className="text-gray-600 dark:text-gray-400">
+                                    Šifra razreda: <span className="text-xl ml-2">{passwordToEmojis(selectedClassroom.class_code.split(''))}</span>
+                                </p>
+                                <button
+                                    onClick={() => setShowAddStudents(true)}
+                                    className="btn btn-primary flex items-center gap-2 !py-2 !px-4"
+                                >
+                                    <span className="text-lg">👤+</span>
+                                    <span>Dodaj učenika</span>
+                                </button>
+                            </div>
                             <p className="text-gray-600 dark:text-gray-400">
                                 Broj učenika: <span className="font-semibold ml-2">{selectedClassroom.student_count}</span>
                             </p>
@@ -209,6 +221,18 @@ export default function TeacherDashboard() {
                     fetchClassrooms();
                 }}
             />
+
+            {/* Add Students Modal */}
+            {selectedClassroom && (
+                <AddStudentsModal
+                    isOpen={showAddStudents}
+                    onClose={() => setShowAddStudents(false)}
+                    onSuccess={() => {
+                        fetchClassrooms();
+                    }}
+                    classroomName={selectedClassroom.class_name}
+                />
+            )}
         </main>
     );
 }
