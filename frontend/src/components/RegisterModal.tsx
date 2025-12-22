@@ -73,7 +73,11 @@ export function RegisterModal({ isOpen, onClose }: RegisterModalProps) {
                     ✕
                 </button>
 
-                <h2 className="text-xl font-bold mb-4">👨‍🏫 Registracija profesora</h2>
+                <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
+                    <i className="fa-solid fa-chalkboard-user text-sky-500" />
+                    Registracija profesora
+                </h2>
+
 
                 {/* Success message */}
                 {success ? (
