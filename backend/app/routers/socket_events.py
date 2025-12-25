@@ -1,4 +1,5 @@
 import datetime
+from typing import Annotated
 from urllib import request
 
 from app.main import sio
@@ -9,8 +10,12 @@ from ..models.users import User
 from ..models.game_players import GamePlayers
 from ..models.users import User
 from .socket_auth import authenticate_socket_with_token
-from ..db import db
+from sqlalchemy.orm import Session
 from ..models.questions import Question
+from ..models.mc_answer import McAnswer
+from ..models.num_answer import NumAnswer
+from ..models.wri_answer import WriAnswer
+
 
 questions = {}
 
@@ -271,7 +276,7 @@ async def handle_start_game(data):
 
                 await sio.enter_room(client, str(new_game_id))
 
-                user_questions = generate_questions(topic_id)
+                user_questions = generate_questions(db=db, topic_id=data["selectedTopic"]["topic_id"], limit=9)
                 questions[str(new_game_id)][client] = [task["task_id"] for task in user_questions]
 
                 await sio.emit(
@@ -336,60 +341,65 @@ async def endGame(sid, data):
 
 
 
-#TODO: POPRAVI OVO DA ODGOVARA NASOJ BAZI
-def generate_questions(topic_id):
-    if topic_id:
-        written_ans = aliased(WrittenAnswer)
-        numerical_ans = aliased(NumericalAnswer)
-        mc_ans = aliased(MultipleChoiceAnswer)
+#TODO: POPRAVI OVO DA ODGOVARA NASIM USE CASEOVIMA
+def generate_questions(db: Session, topic_id, limit=9):
+    
+    if not topic_id: 
+        return []
 
-        queries = []
+    rows = (db.query(Question).filter(Question.topic_id == topic_id)
+                            .order_by(func.random()).limit(limit).all())
+    
+    result = []
 
-        for diff in ["easy", "medium", "high"]:
-            query = (
-                db.session.query(Question, written_ans, numerical_ans, mc_ans)
-                .filter(Task.topic_id == topic_id, Task.difficulty == diff)
-                .outerjoin(written_ans, Task.task_id == written_ans.task_id)
-                .outerjoin(numerical_ans, Task.task_id == numerical_ans.task_id)
-                .outerjoin(mc_ans, Task.task_id == mc_ans.task_id)
-                .order_by(func.random())
-                .limit(3)
+    for q in rows:
+        item = {
+            "question_id": str(q.id),
+            "question": q.text,
+            "difficulty": q.difficulty,  
+            "type": q.type,
+            "answer": {},
+        }
+
+        if q.type == "num":
+            ans = (
+                db.query(NumAnswer)
+                .filter(NumAnswer.question_id == q.id)
+                .first()
             )
-            queries.append(query)
-
-        sample = queries[0]
-        for q in queries[1:]:
-            sample = sample.union_all(q)
-
-        ret = []
-
-        for task, written_data, numerical_data, mc_data in sample.all():
-            obj = {
-                "task_id": str(task.task_id),
-                "question": task.question,
-                "difficulty": task.difficulty,
-                "answer": {},
-            }
-
-            if written_data:
-                obj["answer"] = {
-                    "type": "written",
-                    "correct_answer": written_data.correct_answer,
-                }
-            elif numerical_data:
-                obj["answer"] = {
+            if ans:
+                item["answer"] = {
                     "type": "numerical",
-                    "correct_answer": numerical_data.correct_answer,
-                }
-            else:
-                obj["answer"] = {
-                    "type": "multiple choice",
-                    "option_a": mc_data.option_a,
-                    "option_b": mc_data.option_b,
-                    "option_c": mc_data.option_c,
-                    "correct_answer": mc_data.correct_answer,
+                    "correct_answer": ans.correct_answer,
                 }
 
-            ret.append(obj)
+        elif q.type == "mcq":
+            ans = (
+                db.query(McAnswer)
+                .filter(McAnswer.question_id == q.id)
+                .first()
+            )
+            if ans:
+                item["answer"] = {
+                    "type": "multiple_choice",
+                    "option_a": ans.option_a,
+                    "option_b": ans.option_b,
+                    "option_c": ans.option_c,
+                    "correct_answer": ans.correct_answer,
+                }
 
-    return ret
+        elif q.type == "wri":
+            ans = (
+                db.query(WriAnswer)
+                .filter(WriAnswer.question_id == q.id)
+                .first()
+            )
+            if ans:
+                item["answer"] = {
+                    "type": "written",
+                    "correct_answer": ans.correct_answer,
+                }
+
+        result.append(item)
+    
+    return result
