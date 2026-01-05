@@ -75,6 +75,8 @@ export function GameLobbyModal({ isOpen, onClose, gameId, gameCode }: GameLobbyM
 
     const handleClose = () => {
         if (socketRef.current) {
+            // Closing lobby
+            socketRef.current.emit('closeLobby', { game_id: gameId });
             socketRef.current.disconnect();
             socketRef.current = null;
         }

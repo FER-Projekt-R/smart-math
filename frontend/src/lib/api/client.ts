@@ -53,11 +53,27 @@ export async function apiClient<T>(
 
         clearTimeout(timeoutId);
 
-        const data = await response.json().catch(() => null);
+        let data: any = null;
+        try {
+            data = await response.json();
+        } catch {
+            try {
+                data = await response.text();
+            } catch {
+                data = null;
+            }
+        }
 
         if (!response.ok) {
+            const message =
+                (typeof data === 'string' && data) ||
+                data?.message ||
+                data?.error ||
+                data?.detail ||
+                response.statusText ||
+                'Došlo je do greške';
             throw new ApiError(
-                data?.message || data?.error || 'Došlo je do greške',
+                message,
                 response.status,
                 data?.code
             );

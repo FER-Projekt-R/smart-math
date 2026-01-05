@@ -8,13 +8,16 @@ import { Spinner } from './ui';
 interface JoinGameModalProps {
     isOpen: boolean;
     onClose: () => void;
+    onJoined?: (gameCode: string) => void;
+    onLeft?: () => void;
+    existingGameCode?: string | null;
 }
 
-export function JoinGameModal({ isOpen, onClose }: JoinGameModalProps) {
+export function JoinGameModal({ isOpen, onClose, onJoined, onLeft, existingGameCode }: JoinGameModalProps) {
     const [code, setCode] = useState<string[]>(['', '', '', '']);
     const [isConnecting, setIsConnecting] = useState(false);
     const [isJoined, setIsJoined] = useState(false);
-    const [players, setPlayers] = useState<string[]>([]);
+    const [isClosed, setIsClosed] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
     const socketRef = useRef<Socket | null>(null);
@@ -26,12 +29,12 @@ export function JoinGameModal({ isOpen, onClose }: JoinGameModalProps) {
     useEffect(() => {
         if (!isOpen) return;
         // reset on open
-        setCode(['', '', '', '']);
+        setCode(existingGameCode ? existingGameCode.split('') : ['', '', '', '']);
         setIsConnecting(false);
-        setIsJoined(false);
-        setPlayers([]);
+        setIsJoined(Boolean(existingGameCode));
+        setIsClosed(false);
         setError(null);
-    }, [isOpen]);
+    }, [isOpen, existingGameCode]);
 
     const handleEmojiClick = (key: string) => {
         const emptyIndex = code.findIndex(p => p === '');
@@ -55,13 +58,14 @@ export function JoinGameModal({ isOpen, onClose }: JoinGameModalProps) {
     };
 
     const handleClose = () => {
-        cleanupSocket();
+        if (!isJoined) cleanupSocket();
         onClose();
     };
 
     const handleJoin = async () => {
         setError(null);
-        if (!isComplete) {
+        const codeToUse = existingGameCode || gameCode;
+        if (!codeToUse || codeToUse.length !== 4 || (existingGameCode ? false : !isComplete)) {
             setError('Molimo unesite 4 emojia za kod igre');
             return;
         }
@@ -85,13 +89,22 @@ export function JoinGameModal({ isOpen, onClose }: JoinGameModalProps) {
         socketRef.current = socket;
 
         socket.on('connect', () => {
-            socket.emit('joinGame', { game_code: gameCode });
+            socket.emit('joinGame', { game_code: codeToUse });
         });
 
         socket.on('updatePlayers', (data: { players: string[] }) => {
-            setPlayers(data.players ?? []);
             setIsJoined(true);
             setIsConnecting(false);
+            onJoined?.(codeToUse);
+        });
+
+        socket.on('gameClosed', () => {
+            // Teacher ended/closed the lobby
+            cleanupSocket();
+            setIsConnecting(false);
+            setIsJoined(false);
+            setIsClosed(true);
+            onLeft?.();
         });
 
         socket.on('error', (data: { message?: string }) => {
@@ -124,16 +137,18 @@ export function JoinGameModal({ isOpen, onClose }: JoinGameModalProps) {
     return (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
             <div className="card p-6 max-w-md w-full relative animate-in fade-in zoom-in duration-200">
-                <button
-                    onClick={handleClose}
-                    className="absolute top-3 right-3 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-                >
-                    ✕
-                </button>
+                {!isJoined && (
+                    <button
+                        onClick={handleClose}
+                        className="absolute top-3 right-3 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                    >
+                        ✕
+                    </button>
+                )}
 
                 <h2 className="text-xl font-bold mb-2">Pridruži se igri</h2>
                 <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-                    Unesi kod igre (4 emojia)
+                    {isClosed ? 'Igra je završena' : isJoined ? 'Pridružen/a igri' : 'Unesi kod igre (4 emojia)'}
                 </p>
 
                 {error && (
@@ -142,51 +157,55 @@ export function JoinGameModal({ isOpen, onClose }: JoinGameModalProps) {
                     </div>
                 )}
 
-                <div className="flex justify-center gap-3 mb-4">
-                    {code.map((letter, index) => (
-                        <button
-                            key={index}
-                            onClick={() => handleSlotClick(index)}
-                            disabled={isConnecting}
-                            className={`w-14 h-14 rounded-xl border-3 text-2xl flex items-center justify-center transition-all duration-200
-                                ${letter
-                                    ? 'border-indigo-400 bg-indigo-50 dark:bg-indigo-900/30 scale-105'
-                                    : 'border-dashed border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800'
-                                }
-                                hover:border-indigo-400 disabled:opacity-50 disabled:cursor-not-allowed`}
-                            title={letter ? 'Klikni za brisanje' : `Polje ${index + 1}`}
-                        >
-                            {letter ? getEmoji(letter) : (
-                                <span className="text-gray-300 dark:text-gray-600 text-lg">{index + 1}</span>
-                            )}
-                        </button>
-                    ))}
-                </div>
+                {!isJoined && (
+                    <>
+                        <div className="flex justify-center gap-3 mb-4">
+                            {code.map((letter, index) => (
+                                <button
+                                    key={index}
+                                    onClick={() => handleSlotClick(index)}
+                                    disabled={isConnecting}
+                                    className={`w-14 h-14 rounded-xl border-3 text-2xl flex items-center justify-center transition-all duration-200
+                                        ${letter
+                                            ? 'border-indigo-400 bg-indigo-50 dark:bg-indigo-900/30 scale-105'
+                                            : 'border-dashed border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800'
+                                        }
+                                        hover:border-indigo-400 disabled:opacity-50 disabled:cursor-not-allowed`}
+                                    title={letter ? 'Klikni za brisanje' : `Polje ${index + 1}`}
+                                >
+                                    {letter ? getEmoji(letter) : (
+                                        <span className="text-gray-300 dark:text-gray-600 text-lg">{index + 1}</span>
+                                    )}
+                                </button>
+                            ))}
+                        </div>
 
-                <div className={`bg-gray-50 dark:bg-gray-800/50 rounded-xl p-4 mb-4 ${isConnecting ? 'opacity-50' : ''}`}>
-                    <p className="text-xs text-gray-400 text-center mb-3">Odaberi emoji za kod:</p>
-                    <div className="flex justify-center gap-2 flex-wrap">
-                        {gameKeys.map((key) => (
-                            <button
-                                key={key}
-                                onClick={() => handleEmojiClick(key)}
-                                disabled={!code.includes('') || isConnecting}
-                                className={`w-12 h-12 text-2xl rounded-xl transition-all duration-200 
-                                    ${!code.includes('') || isConnecting
-                                        ? 'opacity-40 cursor-not-allowed'
-                                        : 'hover:bg-indigo-100 dark:hover:bg-indigo-900/40 hover:scale-110 active:scale-95 cursor-pointer'
-                                    }
-                                    bg-white dark:bg-gray-700 shadow-sm border border-gray-200 dark:border-gray-600`}
-                            >
-                                {getEmoji(key)}
-                            </button>
-                        ))}
-                    </div>
-                </div>
+                        <div className={`bg-gray-50 dark:bg-gray-800/50 rounded-xl p-4 mb-4 ${isConnecting ? 'opacity-50' : ''}`}>
+                            <p className="text-xs text-gray-400 text-center mb-3">Odaberi emoji za kod:</p>
+                            <div className="flex justify-center gap-2 flex-wrap">
+                                {gameKeys.map((key) => (
+                                    <button
+                                        key={key}
+                                        onClick={() => handleEmojiClick(key)}
+                                        disabled={!code.includes('') || isConnecting}
+                                        className={`w-12 h-12 text-2xl rounded-xl transition-all duration-200 
+                                            ${!code.includes('') || isConnecting
+                                                ? 'opacity-40 cursor-not-allowed'
+                                                : 'hover:bg-indigo-100 dark:hover:bg-indigo-900/40 hover:scale-110 active:scale-95 cursor-pointer'
+                                            }
+                                            bg-white dark:bg-gray-700 shadow-sm border border-gray-200 dark:border-gray-600`}
+                                    >
+                                        {getEmoji(key)}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    </>
+                )}
 
                 <button
                     onClick={handleJoin}
-                    disabled={isConnecting || !isComplete}
+                    disabled={isConnecting || (!existingGameCode && !isComplete) || isJoined}
                     className="btn btn-primary w-full py-3 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                     {isConnecting ? (
@@ -202,23 +221,28 @@ export function JoinGameModal({ isOpen, onClose }: JoinGameModalProps) {
                 </button>
 
                 {isJoined && (
-                    <div className="mt-4">
-                        <div className="flex items-center justify-between mb-2">
-                            <p className="text-sm font-medium text-gray-600 dark:text-gray-300">U čekaonici</p>
-                            <span className="text-xs bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 px-2 py-1 rounded-full">
-                                {players.length}
-                            </span>
+                    <div className="mt-4 text-center">
+                        <div className="flex items-center justify-center gap-2 text-gray-600 dark:text-gray-300">
+                            <Spinner />
+                            <span className="font-medium">Čekam da profesor započne igru…</span>
                         </div>
-                        <div className="max-h-32 overflow-y-auto space-y-2">
-                            {players.map((p) => (
-                                <div key={p} className="px-3 py-2 rounded-lg bg-gray-50 dark:bg-gray-800 text-sm">
-                                    {p}
-                                </div>
-                            ))}
-                        </div>
-                        <p className="text-xs text-gray-400 mt-3 text-center">
-                            Pričekaj da profesor započne igru.
+                        <p className="text-xs text-gray-400 mt-2">
+                            Ne zatvaraj ovu stranicu.
                         </p>
+                    </div>
+                )}
+
+                {isClosed && (
+                    <div className="mt-4 text-center">
+                        <p className="text-sm text-gray-600 dark:text-gray-300">
+                            Profesor je zatvorio igru.
+                        </p>
+                        <button
+                            onClick={handleClose}
+                            className="btn btn-secondary w-full py-3 mt-4"
+                        >
+                            U redu
+                        </button>
                     </div>
                 )}
             </div>

@@ -10,6 +10,16 @@ export default function StudentDashboard() {
     const router = useRouter();
     const { user, isAuthenticated, isHydrated, logout } = useAuthStore();
     const [showJoinGame, setShowJoinGame] = useState(false);
+    const [joinedGameCode, setJoinedGameCode] = useState<string | null>(null);
+
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+        const code = localStorage.getItem('joined_game_code');
+        if (code && code.trim().length === 4) {
+            setJoinedGameCode(code.trim());
+            setShowJoinGame(true);
+        }
+    }, []);
 
     // Redirect to login if not authenticated
     useEffect(() => {
@@ -71,19 +81,32 @@ export default function StudentDashboard() {
 
                 </div>
 
-                <button
-                    onClick={() => setShowJoinGame(true)}
-                    className="btn btn-primary text-xl px-10 py-4 flex items-center gap-3"
-                >
-                    <i className="fa-solid fa-gamepad text-2xl" />
-                    Započni igru
-                </button>
+                {!joinedGameCode && (
+                    <button
+                        onClick={() => setShowJoinGame(true)}
+                        className="btn btn-primary text-xl px-10 py-4 flex items-center gap-3"
+                    >
+                        <i className="fa-solid fa-gamepad text-2xl" />
+                        Pridruži se igri
+                    </button>
+                )}
 
             </div>
 
             <JoinGameModal
                 isOpen={showJoinGame}
                 onClose={() => setShowJoinGame(false)}
+                existingGameCode={joinedGameCode}
+                onJoined={(code) => {
+                    setJoinedGameCode(code);
+                    localStorage.setItem('joined_game_code', code);
+                    setShowJoinGame(true);
+                }}
+                onLeft={() => {
+                    setJoinedGameCode(null);
+                    localStorage.removeItem('joined_game_code');
+                    setShowJoinGame(false);
+                }}
             />
         </main>
     );
