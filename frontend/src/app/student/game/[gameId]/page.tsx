@@ -46,6 +46,7 @@ export default function StudentGamePage() {
     const [roundFeedback, setRoundFeedback] = useState<'hard' | 'ok' | 'easy' | null>(null);
     const [isLoadingNextBatch, setIsLoadingNextBatch] = useState(false);
     const [batchNumber, setBatchNumber] = useState<number>(0); // 1..5
+    const [xp, setXp] = useState<number>(0);
     const finishedRoundIdsRef = useRef<Record<string, boolean>>({});
     const lastRoundIdRef = useRef<string | null>(null);
     const roundIndexByRoundIdRef = useRef<Record<string, number>>({});
@@ -129,6 +130,28 @@ export default function StudentGamePage() {
             router.push(user.role === 'teacher' ? '/teacher/dashboard' : '/');
         }
     }, [isHydrated, user, router]);
+
+    const fetchMyXp = async () => {
+        const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+        if (!token) return;
+        try {
+            const res = await fetch('http://localhost:8000/stats/my-stats', {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            if (!res.ok) return;
+            const data = (await res.json()) as any;
+            setXp(Number(data?.xp ?? 0) || 0);
+        } catch {
+            // ignore
+        }
+    };
+
+    // Load XP on enter
+    useEffect(() => {
+        if (!isHydrated || !isAuthenticated || !user) return;
+        void fetchMyXp();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isHydrated, isAuthenticated, user?.role]);
 
     // Load payload from sessionStorage (set by JoinGameModal upon receiveQuestions)
     useEffect(() => {
@@ -276,6 +299,10 @@ export default function StudentGamePage() {
 
             dlog('emit finish_round', finishPayload);
             socket.emit('finish_round', finishPayload);
+            // refresh XP after finishing a round.
+            window.setTimeout(() => {
+                void fetchMyXp();
+            }, 600);
         } catch {
             // ignore
         }
@@ -526,6 +553,10 @@ export default function StudentGamePage() {
                                     ? `Pitanje ${Math.min(questionIndex + 1, payload.questions.length)} / ${payload.questions.length}`
                                     : 'Pitanje'}
                             </p>
+                            <div className="flex items-center gap-2 text-2xl font-extrabold text-amber-500">
+                                <i className="fa-solid fa-star" />
+                                <span>{xp}</span>
+                            </div>
                         </div>
                         <div className="mb-6">
                             <p className="text-lg font-medium">{currentQuestion.question}</p>
@@ -572,15 +603,15 @@ export default function StudentGamePage() {
                                 kind === 'correct'
                                     ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'
                                     : kind === 'wrong'
-                                            ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'
-                                            : 'bg-indigo-50 dark:bg-indigo-900/20 border-indigo-200 dark:border-indigo-800';
+                                        ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'
+                                        : 'bg-indigo-50 dark:bg-indigo-900/20 border-indigo-200 dark:border-indigo-800';
 
                             const textClass =
                                 kind === 'correct'
                                     ? 'text-green-700 dark:text-green-200'
                                     : kind === 'wrong'
-                                            ? 'text-red-700 dark:text-red-200'
-                                            : 'text-indigo-700 dark:text-indigo-200';
+                                        ? 'text-red-700 dark:text-red-200'
+                                        : 'text-indigo-700 dark:text-indigo-200';
 
                             const iconClass =
                                 kind === 'correct'
