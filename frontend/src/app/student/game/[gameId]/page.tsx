@@ -34,6 +34,8 @@ export default function StudentGamePage() {
     const [error, setError] = useState<string | null>(null);
     const [feedback, setFeedback] = useState<string | null>(null);
     const [lastSaveStatus, setLastSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+    const [roundFeedback, setRoundFeedback] = useState<'hard' | 'ok' | 'easy' | null>(null);
+    const [isLoadingNextBatch, setIsLoadingNextBatch] = useState(false);
 
     const currentQuestion = useMemo(() => payload?.questions?.[questionIndex] ?? null, [payload, questionIndex]);
 
@@ -84,7 +86,6 @@ export default function StudentGamePage() {
 
     // If payload isn't available yet (e.g. refresh), listen for receiveQuestions on the existing socket.
     useEffect(() => {
-        if (payload) return;
         const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
         if (!token) return;
 
@@ -109,6 +110,8 @@ export default function StudentGamePage() {
                 }
                 setPayload(data as ReceiveQuestionsPayload);
                 setQuestionIndex(0);
+                setRoundFeedback(null);
+                setIsLoadingNextBatch(false);
             }
         };
 
@@ -129,7 +132,7 @@ export default function StudentGamePage() {
             socket.off('answerSaved');
             socket.off('answerError');
         };
-    }, [gameId, payload, currentQuestion?.question_id]);
+    }, [gameId, currentQuestion?.question_id, router]);
 
     // Reset timer when question changes (or first arrives)
     useEffect(() => {
@@ -290,6 +293,23 @@ export default function StudentGamePage() {
         router.push('/student/dashboard');
     };
 
+    const handleRoundFeedback = (value: 'hard' | 'ok' | 'easy') => {
+        setRoundFeedback(value);
+        const token = localStorage.getItem('auth_token');
+        if (!token || !payload) return;
+        const socket = getAuthedSocket(token);
+
+        setIsLoadingNextBatch(true);
+        // Backend expects for `fetch_new_batch`:
+        // - room_id: gameId (string)
+        // - selectedTopic: { topic_id }
+        socket.emit('fetch_new_batch', {
+            room_id: gameId,
+            selectedTopic: { topic_id: payload.topic_id },
+            feedback: value, // optional (backend can ignore for now)
+        });
+    };
+
     if (!isHydrated || !isAuthenticated || !user || user.role !== 'student') {
         return (
             <main className="min-h-screen flex items-center justify-center">
@@ -315,10 +335,62 @@ export default function StudentGamePage() {
 
                 {!currentQuestion ? (
                     <div className="flex flex-col items-center justify-center py-10 gap-3">
-                        <Spinner />
-                        <p className="text-sm text-gray-500 dark:text-gray-400">
-                            {isRoundComplete ? 'Runda završena.' : 'Učitavam pitanja…'}
-                        </p>
+                        {isRoundComplete ? (
+                            <div className="w-full max-w-md text-center">
+                                <h2 className="text-lg font-bold mb-2">Kako si se osjećao na ovoj rundi?</h2>
+                                <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
+                                    Odaberi jednu opciju pa nastavljamo na sljedeći set pitanja.
+                                </p>
+
+                                <div className="flex justify-center gap-4">
+                                    <button
+                                        onClick={() => handleRoundFeedback('hard')}
+                                        disabled={isLoadingNextBatch}
+                                        className="btn btn-outline !px-5 !py-4 text-2xl disabled:opacity-50"
+                                        title="Preteško"
+                                    >
+                                        <i className="fa-solid fa-face-dizzy text-3xl" />
+                                    </button>
+                                    <button
+                                        onClick={() => handleRoundFeedback('ok')}
+                                        disabled={isLoadingNextBatch}
+                                        className="btn btn-outline !px-5 !py-4 text-2xl disabled:opacity-50"
+                                        title="Taman"
+                                    >
+                                        <i className="fa-solid fa-face-meh text-3xl" />
+                                    </button>
+
+                                    <button
+                                        onClick={() => handleRoundFeedback('easy')}
+                                        disabled={isLoadingNextBatch}
+                                        className="btn btn-outline !px-5 !py-4 text-2xl disabled:opacity-50"
+                                        title="Prelagano"
+                                    >
+                                        <i className="fa-solid fa-face-smile-beam text-3xl" />
+                                    </button>
+                                </div>
+
+                                {roundFeedback && !isLoadingNextBatch && (
+                                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-4">
+                                        Odabrano: {roundFeedback === 'easy' ? 'Prelagano' : roundFeedback === 'ok' ? 'Taman' : 'Preteško'}
+                                    </p>
+                                )}
+
+                                {isLoadingNextBatch && (
+                                    <div className="flex items-center justify-center gap-2 mt-6 text-gray-500">
+                                        <Spinner />
+                                        <span>Učitavam novi set pitanja…</span>
+                                    </div>
+                                )}
+                            </div>
+                        ) : (
+                            <>
+                                <Spinner />
+                                <p className="text-sm text-gray-500 dark:text-gray-400">
+                                    Učitavam pitanja…
+                                </p>
+                            </>
+                        )}
                     </div>
                 ) : (
                     <>
