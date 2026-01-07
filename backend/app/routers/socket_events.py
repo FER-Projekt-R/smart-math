@@ -470,22 +470,22 @@ async def startGame(sid, data):
         db.commit()
         db.refresh(round_obj)
 
-            questions[room_key][gp.socket_id] = {
-                "user_id": str(student.id),
-                "question_ids": [q["question_id"] for q in user_questions],
-                "round_id": str(round_obj.id),
-            }
+        questions[room_key][gp.socket_id] = {
+            "user_id": str(student.id),
+            "question_ids": [q["question_id"] for q in user_questions],
+            "round_id": str(round_obj.id),
+        }
 
-            await sio.emit(
-                "receiveQuestions",
-                {
-                    "questions": user_questions,
-                    "game_id": str(game.id),
-                    "topic_id": str(topic_id),
-                    "round_id": str(round_obj.id),
-                },
-                to=gp.socket_id,
-            )
+        await sio.emit(
+            "receiveQuestions",
+            {
+                "questions": user_questions,
+                "game_id": str(game.id),
+                "topic_id": str(topic_id),
+                "round_id": str(round_obj.id),
+            },
+            to=gp.socket_id,
+        )
 
         await sio.emit("gameStarted", {"game_id": str(game.id)}, room=room_key)
     finally:
@@ -562,7 +562,7 @@ def generate_questions(db: Session, topic_id, current_difficulty: int, limit: in
                     "correct_answer": ans.correct_answer,
                 }
 
-        elif q.type == "mcq":
+        """elif q.type == "mcq":
             ans = db.query(McAnswer).filter(McAnswer.question_id == q.id).first()
             if ans:
                 item["answer"] = {
@@ -579,7 +579,7 @@ def generate_questions(db: Session, topic_id, current_difficulty: int, limit: in
                 item["answer"] = {
                     "type": "written",
                     "correct_answer": ans.correct_answer,
-                }
+                }"""
 
         result.append(item)
 
