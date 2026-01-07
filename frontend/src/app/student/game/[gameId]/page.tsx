@@ -43,6 +43,8 @@ export default function StudentGamePage() {
     const [hasSubmitted, setHasSubmitted] = useState<boolean>(false);
     const [attemptsThisQuestion, setAttemptsThisQuestion] = useState<number>(0);
     const [hintClicksThisQuestion, setHintClicksThisQuestion] = useState<number>(0);
+    const [lastAttemptWasWrong, setLastAttemptWasWrong] = useState<boolean>(false);
+    const [isHintOpen, setIsHintOpen] = useState<boolean>(false);
     const timerRef = useRef<number | null>(null);
 
     const timeLeftLabel = useMemo(() => {
@@ -137,6 +139,8 @@ export default function StudentGamePage() {
         setFeedback(null);
         setAttemptsThisQuestion(0);
         setHintClicksThisQuestion(0);
+        setLastAttemptWasWrong(false);
+        setIsHintOpen(false);
         const start = Date.now();
         setQuestionStartedAt(start);
         setSecondsLeft(QUESTION_TIME_LIMIT_SECS);
@@ -192,6 +196,17 @@ export default function StudentGamePage() {
         return answer.trim().toLowerCase() === expected;
     };
 
+    const getHintText = () => {
+        if (!currentQuestion || currentQuestion.type !== 'num') return null;
+        const expectedRaw = currentQuestion.answer?.correct_answer;
+        const expected = Number(expectedRaw);
+        const entered = Number(answer);
+        if (!Number.isFinite(expected) || !Number.isFinite(entered)) return 'Upiši broj kako bi dobio/la hint.';
+        if (entered > expected) return 'Pokušaj unijeti manji broj.';
+        if (entered < expected) return 'Pokušaj unijeti veći broj.';
+        return 'To je točan broj.';
+    };
+
     const finalizeQuestion = async (isAuto = false, attemptsOverride?: number) => {
         setError(null);
         setLastSaveStatus('saving');
@@ -242,10 +257,25 @@ export default function StudentGamePage() {
 
         const isCorrect = computeIsCorrect();
         if (isCorrect) {
+            setLastAttemptWasWrong(false);
             await finalizeQuestion(false, nextAttempts);
         } else {
+            setLastAttemptWasWrong(true);
             setFeedback('Netočno, pokušaj ponovno');
         }
+    };
+
+    const canShowHintButton =
+        currentQuestion?.type === 'num' &&
+        !hasSubmitted &&
+        secondsLeft > 0 &&
+        attemptsThisQuestion >= 1 &&
+        lastAttemptWasWrong;
+
+    const openHint = () => {
+        if (!canShowHintButton) return;
+        setHintClicksThisQuestion((h) => h + 1);
+        setIsHintOpen(true);
     };
 
     const handleLeaveGame = () => {
@@ -317,13 +347,15 @@ export default function StudentGamePage() {
                         </div>
 
                         <div className="flex flex-col sm:flex-row gap-3">
-                            <button
-                                onClick={() => setHintClicksThisQuestion((h) => h + 1)}
-                                disabled={hasSubmitted || secondsLeft <= 0}
-                                className="btn btn-outline w-full sm:w-auto !py-3 disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                                Hint ({hintClicksThisQuestion})
-                            </button>
+                            {canShowHintButton && (
+                                <button
+                                    onClick={openHint}
+                                    className="btn btn-outline w-full sm:w-auto !py-3"
+                                >
+                                    <i className="fa-regular fa-lightbulb mr-2" />
+                                    Hint
+                                </button>
+                            )}
                             <button
                                 onClick={() => void handleAttempt()}
                                 disabled={hasSubmitted || secondsLeft <= 0}
@@ -393,6 +425,34 @@ export default function StudentGamePage() {
                     </>
                 )}
             </div>
+
+            {isHintOpen && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                    <div className="card p-6 max-w-md w-full">
+                        <div className="flex items-start justify-between gap-4 mb-3">
+                            <h3 className="text-lg font-bold flex items-center gap-2">
+                                <i className="fa-regular fa-lightbulb" />
+                                Hint
+                            </h3>
+                            <button
+                                onClick={() => setIsHintOpen(false)}
+                                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                            >
+                                ✕
+                            </button>
+                        </div>
+                        <p className="text-sm text-gray-600 dark:text-gray-300">
+                            {getHintText()}
+                        </p>
+                        <button
+                            onClick={() => setIsHintOpen(false)}
+                            className="btn btn-primary w-full py-3 mt-5"
+                        >
+                            U redu
+                        </button>
+                    </div>
+                </div>
+            )}
         </main>
     );
 }
