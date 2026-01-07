@@ -1,7 +1,7 @@
 'use client';
 
 import { useParams, useRouter } from 'next/navigation';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { Spinner } from '@/components';
 import { disconnectSocket, getAuthedSocket } from '@/lib/realtime/socket';
@@ -29,11 +29,28 @@ export default function StudentGamePage() {
     const gameId = String(params?.gameId ?? '');
 
     const [payload, setPayload] = useState<ReceiveQuestionsPayload | null>(null);
-    const [startedAt, setStartedAt] = useState<number>(Date.now());
+    const [questionIndex, setQuestionIndex] = useState<number>(0);
     const [answer, setAnswer] = useState<string>('');
     const [error, setError] = useState<string | null>(null);
+    const [feedback, setFeedback] = useState<string | null>(null);
+    const [lastSaveStatus, setLastSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
 
-    const currentQuestion = useMemo(() => payload?.questions?.[0] ?? null, [payload]);
+    const currentQuestion = useMemo(() => payload?.questions?.[questionIndex] ?? null, [payload, questionIndex]);
+
+    const QUESTION_TIME_LIMIT_SECS = 30;
+    const [questionStartedAt, setQuestionStartedAt] = useState<number>(Date.now());
+    const [secondsLeft, setSecondsLeft] = useState<number>(QUESTION_TIME_LIMIT_SECS);
+    const [hasSubmitted, setHasSubmitted] = useState<boolean>(false);
+    const [attemptsThisQuestion, setAttemptsThisQuestion] = useState<number>(0);
+    const [hintClicksThisQuestion, setHintClicksThisQuestion] = useState<number>(0);
+    const timerRef = useRef<number | null>(null);
+
+    const timeLeftLabel = useMemo(() => {
+        const total = Math.max(0, Number(secondsLeft) || 0);
+        const mm = Math.floor(total / 60);
+        const ss = total % 60;
+        return `${mm}:${String(ss).padStart(2, '0')}`;
+    }, [secondsLeft]);
 
     useEffect(() => {
         if (isHydrated && (!isAuthenticated || !user)) router.push('/');
@@ -56,7 +73,7 @@ export default function StudentGamePage() {
                     game_id: String(parsed.game_id),
                     topic_id: String(parsed.topic_id),
                 });
-                setStartedAt(Date.now());
+                setQuestionIndex(0);
             }
         } catch {
             // ignore
@@ -89,27 +106,102 @@ export default function StudentGamePage() {
                     // ignore
                 }
                 setPayload(data as ReceiveQuestionsPayload);
-                setStartedAt(Date.now());
+                setQuestionIndex(0);
             }
         };
 
         socket.on('receiveQuestions', handler);
         socket.on('gameClosed', handleClosed);
+        socket.on('answerSaved', (data: any) => {
+            if (String(data?.question_id ?? '') === String(currentQuestion?.question_id ?? '')) {
+                setLastSaveStatus('saved');
+            }
+        });
+        socket.on('answerError', () => {
+            setLastSaveStatus('error');
+        });
 
         return () => {
             socket.off('receiveQuestions', handler);
             socket.off('gameClosed', handleClosed);
+            socket.off('answerSaved');
+            socket.off('answerError');
         };
-    }, [gameId, payload]);
+    }, [gameId, payload, currentQuestion?.question_id]);
 
-    const handleSubmit = async () => {
+    // Reset timer when question changes (or first arrives)
+    useEffect(() => {
+        if (!currentQuestion) return;
+        setHasSubmitted(false);
+        setAnswer('');
+        setFeedback(null);
+        setAttemptsThisQuestion(0);
+        setHintClicksThisQuestion(0);
+        const start = Date.now();
+        setQuestionStartedAt(start);
+        setSecondsLeft(QUESTION_TIME_LIMIT_SECS);
+    }, [currentQuestion]);
+
+    // Countdown timer
+    useEffect(() => {
+        if (!currentQuestion) return;
+        if (hasSubmitted) return;
+
+        if (timerRef.current) {
+            window.clearInterval(timerRef.current);
+        }
+
+        timerRef.current = window.setInterval(() => {
+            const elapsed = (Date.now() - questionStartedAt) / 1000;
+            const left = Math.max(0, Math.ceil(QUESTION_TIME_LIMIT_SECS - elapsed));
+            setSecondsLeft(left);
+            if (left <= 0) {
+                // Auto-submit when time runs out
+                void finalizeQuestion(true);
+            }
+        }, 250);
+
+        return () => {
+            if (timerRef.current) {
+                window.clearInterval(timerRef.current);
+                timerRef.current = null;
+            }
+        };
+    }, [currentQuestion, hasSubmitted, questionStartedAt]);
+
+    const isRoundComplete = Boolean(payload && questionIndex >= (payload.questions?.length ?? 0));
+
+    const computeTimeSpentSecs = (isAuto: boolean) => {
+        const elapsed = (Date.now() - questionStartedAt) / 1000;
+        return isAuto
+            ? QUESTION_TIME_LIMIT_SECS
+            : Math.max(0, Math.min(QUESTION_TIME_LIMIT_SECS, Math.round(elapsed)));
+    };
+
+    const computeIsCorrect = () => {
+        if (!currentQuestion) return false;
+        const expectedRaw = currentQuestion.answer?.correct_answer;
+        if (expectedRaw === undefined || expectedRaw === null) return false;
+
+        if (currentQuestion.type === 'num') {
+            const expected = Number(expectedRaw);
+            return Number(answer) === expected;
+        }
+
+        const expected = String(expectedRaw).trim().toLowerCase();
+        return answer.trim().toLowerCase() === expected;
+    };
+
+    const finalizeQuestion = async (isAuto = false, attemptsOverride?: number) => {
         setError(null);
+        setLastSaveStatus('saving');
         const token = localStorage.getItem('auth_token');
         if (!token) {
             setError('Niste prijavljeni');
             return;
         }
         if (!payload || !currentQuestion) return;
+        if (hasSubmitted) return;
 
         const socket = getAuthedSocket(token);
         const roundId = payload.round_id;
@@ -118,32 +210,42 @@ export default function StudentGamePage() {
             return;
         }
 
-        const timeSpentSecs = Math.max(0, Math.round((Date.now() - startedAt) / 1000));
-
-        // Basic correctness check (best-effort)
-        let isCorrect = false;
-        if (currentQuestion.type === 'num') {
-            const expected = Number(currentQuestion.answer?.correct_answer);
-            isCorrect = Number(answer) === expected;
-        } else if (currentQuestion.type === 'wri') {
-            const expected = String(currentQuestion.answer?.correct_answer ?? '').trim().toLowerCase();
-            isCorrect = answer.trim().toLowerCase() === expected;
-        } else if (currentQuestion.type === 'mcq') {
-            const expected = String(currentQuestion.answer?.correct_answer ?? '').trim().toLowerCase();
-            isCorrect = answer.trim().toLowerCase() === expected;
-        }
+        const isCorrect = isAuto ? false : computeIsCorrect();
+        const timeSpentSecs = computeTimeSpentSecs(isAuto);
+        const numAttemptsToSend = Math.max(1, attemptsOverride ?? attemptsThisQuestion);
 
         socket.emit('submit_answer', {
             round_id: roundId,
             question_id: currentQuestion.question_id,
             is_correct: isCorrect,
             time_spent_secs: timeSpentSecs,
-            hints_used: 0,
-            num_attempts: 1,
+            hints_used: hintClicksThisQuestion,
+            num_attempts: numAttemptsToSend,
         });
 
-        // For now just show local confirmation
-        setError(isCorrect ? 'Točno!' : 'Netočno!');
+        setHasSubmitted(true);
+        setFeedback(isCorrect ? 'Točno!' : isAuto ? 'Vrijeme je isteklo' : 'Netočno!');
+
+        // Move to next question (we'll do finish_round later)
+        window.setTimeout(() => {
+            setQuestionIndex((idx) => idx + 1);
+        }, 350);
+    };
+
+    const handleAttempt = async () => {
+        if (!currentQuestion || hasSubmitted) return;
+        setFeedback(null);
+        setError(null);
+
+        const nextAttempts = attemptsThisQuestion + 1;
+        setAttemptsThisQuestion(nextAttempts);
+
+        const isCorrect = computeIsCorrect();
+        if (isCorrect) {
+            await finalizeQuestion(false, nextAttempts);
+        } else {
+            setFeedback('Netočno, pokušaj ponovno');
+        }
     };
 
     const handleLeaveGame = () => {
@@ -175,10 +277,6 @@ export default function StudentGamePage() {
             </header>
 
             <div className="card p-6 sm:p-8">
-                <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
-                    Pitanje 1
-                </p>
-
                 {error && (
                     <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
                         <p className="text-red-600 dark:text-red-400 text-sm">{error}</p>
@@ -189,11 +287,21 @@ export default function StudentGamePage() {
                     <div className="flex flex-col items-center justify-center py-10 gap-3">
                         <Spinner />
                         <p className="text-sm text-gray-500 dark:text-gray-400">
-                            Učitavam pitanja…
+                            {isRoundComplete ? 'Runda završena.' : 'Učitavam pitanja…'}
                         </p>
                     </div>
                 ) : (
                     <>
+                        <div className="flex items-center justify-between mb-6 gap-4">
+                            <p className="text-sm text-gray-500 dark:text-gray-400">
+                                {payload?.questions?.length
+                                    ? `Pitanje ${Math.min(questionIndex + 1, payload.questions.length)} / ${payload.questions.length}`
+                                    : 'Pitanje'}
+                            </p>
+                            <span className="text-sm font-bold tabular-nums text-gray-600 dark:text-gray-300">
+                                {timeLeftLabel}
+                            </span>
+                        </div>
                         <div className="mb-6">
                             <p className="text-lg font-medium">{currentQuestion.question}</p>
 
@@ -208,12 +316,80 @@ export default function StudentGamePage() {
                             />
                         </div>
 
-                        <button
-                            onClick={handleSubmit}
-                            className="btn btn-primary w-full py-3"
-                        >
-                            Pošalji odgovor
-                        </button>
+                        <div className="flex flex-col sm:flex-row gap-3">
+                            <button
+                                onClick={() => setHintClicksThisQuestion((h) => h + 1)}
+                                disabled={hasSubmitted || secondsLeft <= 0}
+                                className="btn btn-outline w-full sm:w-auto !py-3 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                Hint ({hintClicksThisQuestion})
+                            </button>
+                            <button
+                                onClick={() => void handleAttempt()}
+                                disabled={hasSubmitted || secondsLeft <= 0}
+                                className="btn btn-primary w-full py-3 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                Provjeri odgovor (pokušaji: {attemptsThisQuestion})
+                            </button>
+                        </div>
+
+                        {feedback && (() => {
+                            const msg = feedback.trim().toLowerCase();
+                            const kind = msg.includes('netočno')
+                                ? 'wrong'
+                                : msg.includes('vrijeme')
+                                    ? 'timeout'
+                                    : (msg.startsWith('točno') || msg === 'točno!')
+                                        ? 'correct'
+                                        : 'info';
+
+                            const boxClass =
+                                kind === 'correct'
+                                    ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'
+                                    : kind === 'timeout'
+                                        ? 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800'
+                                        : kind === 'wrong'
+                                            ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'
+                                            : 'bg-indigo-50 dark:bg-indigo-900/20 border-indigo-200 dark:border-indigo-800';
+
+                            const textClass =
+                                kind === 'correct'
+                                    ? 'text-green-700 dark:text-green-200'
+                                    : kind === 'timeout'
+                                        ? 'text-yellow-800 dark:text-yellow-200'
+                                        : kind === 'wrong'
+                                            ? 'text-red-700 dark:text-red-200'
+                                            : 'text-indigo-700 dark:text-indigo-200';
+
+                            const iconClass =
+                                kind === 'correct'
+                                    ? 'fa-solid fa-circle-check'
+                                    : kind === 'timeout'
+                                        ? 'fa-solid fa-clock'
+                                        : kind === 'wrong'
+                                            ? 'fa-solid fa-triangle-exclamation'
+                                            : 'fa-solid fa-circle-info';
+
+                            return (
+                                <div className={`mt-6 p-3 rounded-lg border ${boxClass}`}>
+                                    <p className={`text-sm flex items-center gap-2 ${textClass}`}>
+                                        <i className={iconClass} />
+                                        <span>{feedback}</span>
+                                        {hasSubmitted && (
+                                            <span className="ml-auto text-xs opacity-80">
+                                                {lastSaveStatus === 'saving'
+                                                    ? 'Spremam…'
+                                                    : lastSaveStatus === 'saved'
+                                                        ? 'Spremljeno'
+                                                        : lastSaveStatus === 'error'
+                                                            ? 'Greška pri spremanju'
+                                                            : ''}
+                                            </span>
+                                        )}
+                                    </p>
+                                </div>
+                            );
+                        })()}
                     </>
                 )}
             </div>
