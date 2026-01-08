@@ -5,7 +5,7 @@ import random
 import uuid
 
 from app.main import sio
-from sqlalchemy import case, func
+from sqlalchemy import case, desc, func
 from sqlalchemy.orm import Session
 
 from ..db import SessionLocal
@@ -216,6 +216,33 @@ async def emit_players(game_id):
 
         players_simple = [r.username for r in rows]
 
+        user_ids = [r.user_id for r in rows if r.user_id]
+
+        # Latest recommendation
+        rec_map: dict[str, dict] = {}
+        if user_ids:
+            latest_recs = (
+                db.query(
+                    Recommendation.user_id.label("user_id"),
+                    Recommendation.rec.label("rec"),
+                    Recommendation.confidence.label("confidence"),
+                )
+                .outerjoin(Round, Round.id == Recommendation.round_id)
+                .filter(Recommendation.user_id.in_(user_ids))
+                .order_by(
+                    Recommendation.user_id,
+                    desc(Round.end_ts).nulls_last(),
+                    desc(Recommendation.id),
+                )
+                .distinct(Recommendation.user_id)
+                .all()
+            )
+            for r in latest_recs:
+                rec_map[str(r.user_id)] = {
+                    "last_recommendation": r.rec,
+                    "recommendation_confidence": float(r.confidence) if r.confidence is not None else None,
+                }
+
         # Rank players by XP (desc). If stats row doesn't exist, treat as 0.
         ranked = sorted(rows, key=lambda r: int(r.xp or 0), reverse=True)
         rank_by_user_id = {str(r.user_id): idx + 1 for idx, r in enumerate(ranked)}
@@ -227,6 +254,7 @@ async def emit_players(game_id):
                 "level": int(r.level or 1),
                 "xp": int(r.xp or 0),
                 "rank": int(rank_by_user_id.get(str(r.user_id), 0) or 0),
+                **(rec_map.get(str(r.user_id)) or {}),
             }
             for r in rows
         ]

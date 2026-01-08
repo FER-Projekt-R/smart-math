@@ -19,7 +19,7 @@ export default function TeacherGamePage() {
 
     const [players, setPlayers] = useState<string[]>([]);
     const [playersDetailed, setPlayersDetailed] = useState<
-        Array<{ user_id: string; username: string; level: number; xp: number; rank: number }>
+        Array<{ user_id: string; username: string; level: number; xp: number; rank: number; last_recommendation?: string | null }>
     >([]);
     const [isConnecting, setIsConnecting] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -30,6 +30,7 @@ export default function TeacherGamePage() {
     const [classroomName, setClassroomName] = useState<string>('');
     const socketRef = useRef<Socket | null>(null);
     const lastOverrideRefreshAtRef = useRef<number>(0);
+    const overrideRefreshTimerRef = useRef<number | null>(null);
 
     const dlog = (...args: any[]) => {
         try {
@@ -44,7 +45,16 @@ export default function TeacherGamePage() {
     const refreshOverrideEligible = async (token: string, classroomNameToUse: string) => {
         if (!token || !classroomNameToUse) return;
         const now = Date.now();
-        if (now - lastOverrideRefreshAtRef.current < 1500) return;
+        const elapsed = now - lastOverrideRefreshAtRef.current;
+        if (elapsed < 1500) {
+            const waitMs = Math.max(0, 1500 - elapsed) + 50;
+            if (overrideRefreshTimerRef.current) window.clearTimeout(overrideRefreshTimerRef.current);
+            overrideRefreshTimerRef.current = window.setTimeout(() => {
+                overrideRefreshTimerRef.current = null;
+                void refreshOverrideEligible(token, classroomNameToUse);
+            }, waitMs);
+            return;
+        }
         lastOverrideRefreshAtRef.current = now;
 
         try {
@@ -112,21 +122,34 @@ export default function TeacherGamePage() {
         });
 
         socket.on('updatePlayers', (data: { players?: string[]; playersDetailed?: any[] }) => {
-            dlog('updatePlayers', { players: data?.players?.length, detailed: data?.playersDetailed?.length });
+            dlog('updatePlayers', { players: data?.players?.length, detailed: data?.playersDetailed?.length, classroomName });
             setPlayers(data?.players ?? []);
             if (Array.isArray(data?.playersDetailed)) {
-                setPlayersDetailed(
-                    data.playersDetailed
-                        .filter((p) => p && typeof p === 'object')
-                        .map((p: any) => ({
-                            user_id: String(p.user_id ?? ''),
-                            username: String(p.username ?? ''),
-                            level: Number(p.level ?? 1),
-                            xp: Number(p.xp ?? 0),
-                            rank: Number(p.rank ?? 0),
-                        }))
-                        .filter((p) => p.user_id && p.username),
+                const mapped = data.playersDetailed
+                    .filter((p) => p && typeof p === 'object')
+                    .map((p: any) => ({
+                        user_id: String(p.user_id ?? ''),
+                        username: String(p.username ?? ''),
+                        level: Number(p.level ?? 1),
+                        xp: Number(p.xp ?? 0),
+                        rank: Number(p.rank ?? 0),
+                        last_recommendation: (p?.last_recommendation ?? p?.lastRecommendation ?? null) as any,
+                    }))
+                    .filter((p) => p.user_id && p.username);
+                setPlayersDetailed(mapped);
+
+                const hasRecField = (data.playersDetailed || []).some(
+                    (p: any) => p && typeof p === 'object' && ('last_recommendation' in p || 'lastRecommendation' in p),
                 );
+                if (hasRecField) {
+                    const map: Record<string, boolean> = {};
+                    for (const p of mapped) {
+                        map[p.username] = Boolean(p.last_recommendation);
+                    }
+                    setOverrideEligible(map);
+                    dlog('overrideEligible(from socket)', map);
+                    return;
+                }
             } else {
                 setPlayersDetailed([]);
             }
@@ -143,6 +166,10 @@ export default function TeacherGamePage() {
         });
 
         return () => {
+            if (overrideRefreshTimerRef.current) {
+                window.clearTimeout(overrideRefreshTimerRef.current);
+                overrideRefreshTimerRef.current = null;
+            }
             // End game
             try {
                 socket.emit('endGame', { game_id: gameId });
