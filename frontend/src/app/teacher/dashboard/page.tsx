@@ -148,7 +148,7 @@ export default function TeacherDashboard() {
             <header className="sticky top-0 z-10 p-4 sm:p-6 flex justify-end items-center" style={{ background: 'var(--background)' }}>
                 <div className="flex items-center gap-3 sm:gap-4">
                     <div className="flex items-center gap-2 px-3 py-2 rounded-xl" style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)' }}>
-                        <div className="w-10 h-10 flex items-center justify-center rounded-full bg-green-400">
+                        <div className="w-7 h-7 flex items-center justify-center rounded-full bg-green-400">
                             <i className="fa-solid fa-chalkboard-user text-white text-lg" />
                         </div>
 
