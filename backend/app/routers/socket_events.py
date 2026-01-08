@@ -1,4 +1,6 @@
+import asyncio
 import datetime
+from functools import partial
 import random
 import uuid
 
@@ -448,6 +450,7 @@ async def startGame(sid, data):
                 user_id=student.id,
                 game_id=game.id,
                 question_count=len(user_questions),
+                round_index=0,
             )
             db.add(round_obj)
             db.commit()
@@ -634,12 +637,22 @@ async def fetch_new_batch(sid, data):
         current_difficulty = student.current_difficulty
         user_questions = generate_questions(db, topic_id, current_difficulty)
 
+        last_round = (
+            db.query(Round)
+            .filter(Round.user_id == user_id, Round.game_id == game_id)
+            .order_by(Round.round_index.desc())
+            .first()
+        )
+        next_index = 0 if last_round is None else last_round.round_index + 1
+
         # Create round
         round_obj = Round(
             user_id=user_id,
             game_id=game_id,
             question_count=len(user_questions),
+            round_index=next_index,
         )
+
         db.add(round_obj)
         db.commit()
         db.refresh(round_obj)
@@ -682,7 +695,7 @@ async def finish_round(sid, data):
 
         user_id = session["user_id"]
         try:
-            finalize_round(db, data["round_id"], user_id)
+            await finalize_round(db, data["round_id"], user_id)
         except Exception as e:
             await sio.emit("finishRoundError", {"message": str(e)}, to=sid)
             return
@@ -697,7 +710,7 @@ async def finish_round(sid, data):
         db.close()
 
 
-def finalize_round(db: Session, round_id, user_id):
+async def finalize_round(db: Session, round_id, user_id):
     student = db.query(User).filter((User.id == user_id)).first()
 
     stats = (
@@ -733,25 +746,21 @@ def finalize_round(db: Session, round_id, user_id):
         )
     )
 
-    prev_round = None
-    if round_obj.round_index is not None:
-        try:
-            prev_idx = int(round_obj.round_index) - 1
-        except Exception:
-            prev_idx = None
-        if prev_idx and prev_idx > 0:
-            prev_round = (
-                db.query(Round)
-                .filter(Round.user_id == user_id, Round.round_index == prev_idx)
-                .one_or_none()
-            )
+    prev_round = (
+        db.query(Round)
+        .filter(
+            Round.user_id == user_id,
+            Round.round_index == round_obj.round_index - 1,
+            Round.game_id == round_obj.game_id
+        )
+        .one_or_none()
+    )
 
     if prev_round:
         prev_rec = (
             db.query(Recommendation)
             .filter(
-                Recommendation.user_id == user_id,
-                Recommendation.round_index == prev_round.round_index,
+                Recommendation.round_id == prev_round.id,
                 Recommendation.true_label.is_(None),
             )
             .one_or_none()
@@ -765,15 +774,25 @@ def finalize_round(db: Session, round_id, user_id):
             db.add(prev_rec)
             db.commit()
 
-            feedback_function(
-                FeedbackRequest(
+            try:
+                loop = asyncio.get_event_loop()
+
+                feedback_req = FeedbackRequest(
                     accuracy=prev_round.accuracy,
                     avg_time=prev_round.avg_time_secs,
                     hints_used=prev_round.hints,
                     true_label=true_label,
-                    sample_weight=5.0 * prev_rec.confidence,
+                    sample_weight=(5.0 * float(prev_rec.confidence)),
                 )
-            )
+
+                await loop.run_in_executor(
+                    None,
+                    partial(feedback_function, feedback_req)              
+                )
+            except Exception as e:
+                print(f'FEEDBACK ERROR: {str(e)}')
+                import traceback
+                traceback.print_exc()
 
     # Defaults to avoid unbound new_diff/rec_text at edges
     new_diff = student.current_difficulty
