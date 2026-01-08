@@ -718,7 +718,7 @@ async def finalize_round(db: Session, round_id, user_id):
             func.count(Attempt.id),
             func.avg(Attempt.time_spent_secs),
             func.sum(Attempt.hints_used),
-            func.avg(case((Attempt.is_correct.is_(True), 1), else_=0)),
+            func.avg(1.0 / Attempt.num_attempts),
         )
         .filter(Attempt.round_id == round_id)
         .one()
