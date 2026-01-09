@@ -59,7 +59,7 @@ export default function TeacherGamePage() {
 
         try {
             const res = await fetch(
-                `http://localhost:8000/override/recommendations/${encodeURIComponent(classroomNameToUse)}`,
+                `${process.env.NEXT_PUBLIC_API_URL}/override/recommendations/${encodeURIComponent(classroomNameToUse)}`,
                 { headers: { Authorization: `Bearer ${token}` } },
             );
             if (!res.ok) return;
@@ -102,7 +102,7 @@ export default function TeacherGamePage() {
             return;
         }
 
-        const socket = io('http://localhost:8000', {
+        const socket = io(`${process.env.NEXT_PUBLIC_API_URL}`, {
             transports: ['polling', 'websocket'],
             withCredentials: true,
             auth: { token },
@@ -191,7 +191,7 @@ export default function TeacherGamePage() {
 
         const run = async () => {
             try {
-                const res = await fetch('http://localhost:8000/classroom/my-classrooms', {
+                const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/classroom/my-classrooms`, {
                     headers: { Authorization: `Bearer ${token}` },
                 });
                 if (!res.ok) return;
@@ -250,7 +250,7 @@ export default function TeacherGamePage() {
         setError(null);
         try {
             dlog('override click', { studentUsername, direction });
-            const res = await fetch('http://localhost:8000/override/', {
+            const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/override/`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

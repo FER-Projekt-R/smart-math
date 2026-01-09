@@ -144,7 +144,7 @@ export default function StudentGamePage() {
         const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
         if (!token) return;
         try {
-            const res = await fetch('http://localhost:8000/stats/my-stats', {
+            const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/stats/my-stats`, {
                 headers: { Authorization: `Bearer ${token}` },
             });
             if (!res.ok) return;
