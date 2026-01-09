@@ -29,5 +29,7 @@ source/
 *.csv
 
 # Output mape
-model_output/
+#model_output/
+eda.json
+evaluation.json
 model_output_simple/
