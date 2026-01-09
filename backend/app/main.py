@@ -11,14 +11,12 @@ from .routers.topics_router import router as topics_router
 from .routers.stats_router import router as stats_router
 from .routers.override_router import router as override_router
 
-FRONTEND_URL = os.getenv("FRONTEND_URL")
-
 sio = socketio.AsyncServer(
     async_mode="asgi",
     cors_allowed_origins=[
         "http://localhost:3000",
         "http://127.0.0.1:3000",
-        FRONTEND_URL,
+        "https://smart-math-phi.vercel.app",
     ],
 )
 
@@ -29,7 +27,7 @@ fastapi_app.add_middleware(
     allow_origins=[
         "http://localhost:3000",
         "http://127.0.0.1:3000",
-        FRONTEND_URL,
+        "https://smart-math-phi.vercel.app",
     ],
     allow_credentials=True,
     allow_methods=["*"],
