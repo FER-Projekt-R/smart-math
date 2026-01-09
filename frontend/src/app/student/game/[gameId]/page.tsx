@@ -332,6 +332,7 @@ export default function StudentGamePage() {
                 accuracy,
                 avg_time_secs: avgTimeSecs,
                 hints: totalHints,
+                xp: xp
             };
 
             dlog('emit finish_round', finishPayload);
