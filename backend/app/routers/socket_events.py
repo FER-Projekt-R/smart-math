@@ -723,7 +723,7 @@ async def finish_round(sid, data):
 
         user_id = session["user_id"]
         try:
-            await finalize_round(db, data["round_id"], user_id)
+            await finalize_round(db, data["round_id"], user_id, data["xp"])
         except Exception as e:
             await sio.emit("finishRoundError", {"message": str(e)}, to=sid)
             return
@@ -738,7 +738,7 @@ async def finish_round(sid, data):
         db.close()
 
 
-async def finalize_round(db: Session, round_id, user_id):
+async def finalize_round(db: Session, round_id, user_id, xp):
     student = db.query(User).filter((User.id == user_id)).first()
 
     stats = (
@@ -886,7 +886,7 @@ async def finalize_round(db: Session, round_id, user_id):
     ) / new_attempts
 
     # XP (podlozno promjeni ovisi kak se dogovorimo)
-    xp_gained = int(round_accuracy * 100)
+    xp_gained = xp
 
     stats.total_attempts = new_attempts
     stats.overall_accuracy = new_accuracy
