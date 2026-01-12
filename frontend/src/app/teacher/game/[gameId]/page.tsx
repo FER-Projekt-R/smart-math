@@ -7,6 +7,8 @@ import { io, Socket } from 'socket.io-client';
 import { Spinner } from '@/components';
 import { useAuthStore } from '@/lib/store';
 
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+
 export default function TeacherGamePage() {
     const router = useRouter();
     const search = useSearchParams();
@@ -31,6 +33,8 @@ export default function TeacherGamePage() {
     const socketRef = useRef<Socket | null>(null);
     const lastOverrideRefreshAtRef = useRef<number>(0);
     const overrideRefreshTimerRef = useRef<number | null>(null);
+    const closeConfirmingRef = useRef(false);
+    const lastPlayersUpdateAtRef = useRef<number>(0);
 
     const dlog = (...args: any[]) => {
         try {
@@ -59,7 +63,7 @@ export default function TeacherGamePage() {
 
         try {
             const res = await fetch(
-                `http://localhost:8000/override/recommendations/${encodeURIComponent(classroomNameToUse)}`,
+                `${API_BASE_URL}/override/recommendations/${encodeURIComponent(classroomNameToUse)}`,
                 { headers: { Authorization: `Bearer ${token}` } },
             );
             if (!res.ok) return;
@@ -102,7 +106,7 @@ export default function TeacherGamePage() {
             return;
         }
 
-        const socket = io('http://localhost:8000', {
+        const socket = io(API_BASE_URL, {
             transports: ['polling', 'websocket'],
             withCredentials: true,
             auth: { token },
@@ -123,6 +127,9 @@ export default function TeacherGamePage() {
 
         socket.on('updatePlayers', (data: { players?: string[]; playersDetailed?: any[] }) => {
             dlog('updatePlayers', { players: data?.players?.length, detailed: data?.playersDetailed?.length, classroomName });
+            lastPlayersUpdateAtRef.current = Date.now();
+            // If we got here after a `gameClosed`, it means the game is still active and we should ignore the close.
+            if (closeConfirmingRef.current) closeConfirmingRef.current = false;
             setPlayers(data?.players ?? []);
             if (Array.isArray(data?.playersDetailed)) {
                 const mapped = data.playersDetailed
@@ -162,22 +169,49 @@ export default function TeacherGamePage() {
         });
 
         socket.on('gameClosed', () => {
-            setError('Igra je zatvorena');
+            // Teacher ended the game
+            const since = Date.now();
+            closeConfirmingRef.current = true;
+            dlog('gameClosed (confirming...)');
+
+            try {
+                socket.emit('teacherJoin', { game_id: gameId, mode: 'game' });
+            } catch {
+                // ignore
+            }
+
+            window.setTimeout(() => {
+                // igra aktivna ako smo dobili updatePlayers nakon gameClosed
+                if (lastPlayersUpdateAtRef.current > since) return;
+                // ako smo dobili updatePlayers nakon gameClosed, ne brisemo UI
+                if (closeConfirmingRef.current) {
+                    dlog('gameClosed not confirmed; keeping UI running');
+                    closeConfirmingRef.current = false;
+                }
+            }, 900);
         });
 
         socket.on('error', (data: { message?: string }) => {
-            setError(data?.message || 'Greška');
+            const msg = String(data?.message || 'Greška');
+            if (closeConfirmingRef.current) {
+                // ako je poruka about already finished, brisemo UI
+                if (msg.toLowerCase().includes('already finished')) {
+                    closeConfirmingRef.current = false;
+                    setError('Igra je zatvorena');
+                    return;
+                }
+                // ako je poruka about invalid game, brisemo UI
+                dlog('error while confirming close; ignoring', msg);
+                closeConfirmingRef.current = false;
+                return;
+            }
+            setError(msg);
         });
 
         return () => {
             if (overrideRefreshTimerRef.current) {
                 window.clearTimeout(overrideRefreshTimerRef.current);
                 overrideRefreshTimerRef.current = null;
-            }
-            // End game
-            try {
-                socket.emit('endGame', { game_id: gameId });
-            } catch {
             }
             socket.disconnect();
             socketRef.current = null;
@@ -191,7 +225,7 @@ export default function TeacherGamePage() {
 
         const run = async () => {
             try {
-                const res = await fetch('http://localhost:8000/classroom/my-classrooms', {
+                const res = await fetch(`${API_BASE_URL}/classroom/my-classrooms`, {
                     headers: { Authorization: `Bearer ${token}` },
                 });
                 if (!res.ok) return;
@@ -250,7 +284,7 @@ export default function TeacherGamePage() {
         setError(null);
         try {
             dlog('override click', { studentUsername, direction });
-            const res = await fetch('http://localhost:8000/override/', {
+            const res = await fetch(`${API_BASE_URL}/override/`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

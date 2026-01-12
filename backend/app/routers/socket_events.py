@@ -1,8 +1,8 @@
 import asyncio
 import datetime
-from functools import partial
 import random
 import uuid
+from functools import partial
 
 from app.main import sio
 from sqlalchemy import case, desc, func
@@ -314,28 +314,7 @@ async def disconnect(sid):
             session = await sio.get_session(sid)
         except Exception:
             session = None
-
-        # If teacher leaves the *game page* (mode == 'game'), end the game for everyone.
-        # (We intentionally do NOT auto-finish on lobby disconnect, because navigating to the game page
-        # creates a new socket and would otherwise end the lobby immediately.)
         if session and session.get("role") == "teacher":
-            if session.get("mode") == "game" and session.get("game_id"):
-                try:
-                    game_id = uuid.UUID(str(session["game_id"]))
-                    teacher_id = uuid.UUID(str(session["user_id"]))
-                except Exception:
-                    return
-
-                game = (
-                    db.query(Game)
-                    .filter(Game.id == game_id, Game.teacher_id == teacher_id)
-                    .first()
-                )
-                if game and game.status != "finished":
-                    _finish_game(db, game)
-                    await sio.emit(
-                        "gameClosed", {"game_id": str(game.id)}, room=str(game.id)
-                    )
             return
 
         # Prefer DB lookup by socket_id; fallback to session if needed
