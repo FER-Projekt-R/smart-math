@@ -1,0 +1,6 @@
+| Vrijeme          | Mijenja se                                           |
+| ---------------- | ---------------------------------------------------- |
+| Start runde      | `Round.current_difficulty = User.current_difficulty` |
+| Po pitanju       | zapis u `Attempt`                                    |
+| Teacher override | `TeacherAction`, update `Round.current_difficulty`   |
+| Kraj runde       | `User.current_difficulty` (ako accept / auto)        |

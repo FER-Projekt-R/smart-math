@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Text, TIMESTAMP, ForeignKey, CheckConstraint
+from sqlalchemy import Column, Text, TIMESTAMP, ForeignKey, CheckConstraint, SmallInteger
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
 import uuid
@@ -11,6 +11,7 @@ class TeacherAction(Base):
     teacher_id = Column(UUID(as_uuid=True), ForeignKey("users.id"))
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"))  # student
     action = Column(Text)
+    forced_difficulty = Column(SmallInteger) # active override
     recommendation_id = Column(UUID(as_uuid=True), ForeignKey("recommendations.id"))
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
 

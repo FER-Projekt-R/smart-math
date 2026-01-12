@@ -17,6 +17,7 @@ class Round(Base):
     start_ts = Column(TIMESTAMP(timezone=True), server_default=func.now())
     end_ts = Column(TIMESTAMP(timezone=True))
     question_count = Column(SmallInteger)
+    current_difficulty = Column(SmallInteger) # izvor difficultyja kad nema overridea
     accuracy = Column(Numeric)  # 0..1
     avg_time_secs = Column(Numeric)
     hints = Column(Numeric)

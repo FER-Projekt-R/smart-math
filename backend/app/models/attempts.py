@@ -9,6 +9,7 @@ class Attempt(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"))
     question_id = Column(UUID(as_uuid=True), ForeignKey("questions.id"))
+    difficulty_at_time = Column(SmallInteger) # koja je razina bila aktivna kad je pitanje poslano
     is_correct = Column(Boolean)
     num_attempts = Column(SmallInteger)
     time_spent_secs = Column(Integer)
