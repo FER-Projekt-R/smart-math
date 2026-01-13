@@ -92,6 +92,21 @@ def override_decision(
 
     db.add(student)
 
+    # UPDATE AKTIVNE RUNDE
+    active_round = (
+        db.query(Round)
+        .filter(
+            Round.user_id == student.id,
+            Round.end_ts.is_(None),
+        )
+        .order_by(desc(Round.start_ts))
+        .first()
+    )
+
+    if active_round:
+        active_round.current_difficulty = student.current_difficulty
+        db.add(active_round)
+
     # zabiljezi promjenu u sustavu
     new_override = TeacherAction(
         teacher_id=current_user.id,

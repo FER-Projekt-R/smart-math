@@ -483,21 +483,25 @@ async def startGame(sid, data):
             if not student:
                 continue
 
-            user_questions = generate_questions(
+            """user_questions = generate_questions(
                 db, topic_id, student.current_difficulty
-            )
+            )"""
 
             round_obj = Round(
                 user_id=student.id,
                 game_id=game.id,
-                question_count=len(user_questions),
+                #question_count=len(user_questions),
+                topic_id=topic_id,
                 round_index=0,
+                current_difficulty = student.current_difficulty,
+                #current_question_index = 0,
+                #status = "active",
             )
             db.add(round_obj)
             db.commit()
             db.refresh(round_obj)
 
-            questions[room_key][gp.socket_id] = {
+            """questions[room_key][gp.socket_id] = {
                 "user_id": str(student.id),
                 "question_ids": [q["question_id"] for q in user_questions],
                 "round_id": str(round_obj.id),
@@ -512,11 +516,126 @@ async def startGame(sid, data):
                     "round_id": str(round_obj.id),
                 },
                 to=gp.socket_id,
+            )"""
+            print("Emitting roundStarted to:", gp.user_id, gp.socket_id)
+
+            await sio.emit(
+                "roundStarted",
+                {
+                    "round_id": str(round_obj.id),
+                    "game_id": str(game.id),
+                    "topic_id": str(topic_id),
+                },
+                to=gp.socket_id,
             )
 
         await sio.emit("gameStarted", {"game_id": str(game.id)}, room=room_key)
     finally:
         db.close()
+
+
+@sio.event
+async def getNextQuestion(sid, data):
+    db = SessionLocal()
+    try:
+        session = await sio.get_session(sid)
+        user_id = session["user_id"]
+        round_id = data["round_id"]
+
+        round_obj = db.query(Round).filter(Round.id == round_id).one()
+
+        topic_id = round_obj.topic_id
+
+        # 1) resolve difficulty
+        forced = get_active_teacher_override(user_id, round_id)
+        difficulty = forced or round_obj.current_difficulty
+
+        # 2) generate ONE question
+        question = generate_single_question(db, topic_id, difficulty)
+
+        # 3) increment index
+        round_obj.current_question_index += 1
+        db.add(round_obj)
+        db.commit()
+
+
+        sio.start_background_task(
+            sio.emit,
+            "difficultyOverridden",
+            {
+                "user_id": user_id,
+                "new_difficulty": difficulty,
+            }
+        )
+
+
+        await sio.emit(
+            "receiveQuestion",
+            {
+                "round_id": round_id,
+                "question": question,
+                "difficulty": difficulty,
+                "question_index": round_obj.current_question_index,
+            },
+            to=sid,
+        )
+    finally:
+        db.close()
+
+
+@sio.event
+async def difficultyOverridden(sid, data):
+    """
+    Internal event, teacher override happened.
+    We notify the affected student if connected.
+    """
+    user_id = data["user_id"]
+    new_diff = data["new_difficulty"]
+
+    db = SessionLocal()
+    try:
+        player = (
+            db.query(GamePlayers)
+            .filter(
+                GamePlayers.user_id == user_id,
+                GamePlayers.is_active.is_(True),
+            )
+            .first()
+        )
+        if not player or not player.socket_id:
+            return
+
+        await sio.emit(
+            "difficultyUpdated",
+            {"new_difficulty": new_diff},
+            to=player.socket_id,
+        )
+    finally:
+        db.close()
+
+def get_active_teacher_override(user_id, round_id):
+    db = SessionLocal()
+    try:
+        round_obj = db.query(Round).filter(Round.id == round_id).one_or_none()
+        if not round_obj:
+            return None
+
+        user = db.query(User).filter(User.id == user_id).one_or_none()
+        if not user:
+            return None
+
+        # ako se user.current_difficulty razlikuje od round snapshot-a
+        if user.current_difficulty != round_obj.current_difficulty:
+            round_obj.current_difficulty = user.current_difficulty
+            db.add(round_obj)
+            db.commit()
+            return user.current_difficulty
+
+        return None
+    finally:
+        db.close()
+
+
 
 
 @sio.event
@@ -612,6 +731,39 @@ def generate_questions(db: Session, topic_id, current_difficulty: int, limit: in
 
     return result
 
+def generate_single_question(db: Session, topic_id, difficulty: int):
+    q = (
+        db.query(Question)
+        .filter(
+            Question.topic_id == topic_id,
+            Question.difficulty == difficulty,
+        )
+        .order_by(func.random())
+        .first()
+    )
+
+    if not q:
+        return None
+
+    item = {
+        "question_id": str(q.id),
+        "question": q.text,
+        "difficulty": q.difficulty,
+        "type": q.type,
+        "answer": {},
+    }
+
+    if q.type == "num":
+        ans = db.query(NumAnswer).filter(NumAnswer.question_id == q.id).first()
+        if ans:
+            item["answer"] = {
+                "type": "numerical",
+                "correct_answer": ans.correct_answer,
+            }
+
+    return item
+
+
 
 # FRONTEND SALJE:
 # {
@@ -641,6 +793,7 @@ async def submit_answer(sid, data):
             num_attempts=data.get("num_attempts", 1),
             time_spent_secs=data.get("time_spent_secs", 0),
             hints_used=data.get("hints_used", 0),
+            difficulty_at_time=data["difficulty_at_time"],
         )
 
         db.add(attempt)
@@ -657,7 +810,7 @@ async def submit_answer(sid, data):
 # frontend salje:
 # topic_id = data["selectedTopic"]["topic_id"]
 # room_id = data["room_id"]
-@sio.event
+"""@sio.event
 async def fetch_new_batch(sid, data):
     db: Session = SessionLocal()
     try:
@@ -722,7 +875,7 @@ async def fetch_new_batch(sid, data):
         await sio.emit("error", {"message": f"Database error {str(e)}"}, to=sid)
         return
     finally:
-        db.close()
+        db.close()"""
 
 
 # EVENT ZA GOTOVU RUNDU SVAKOG UCENIKA
@@ -865,8 +1018,8 @@ async def finalize_round(db: Session, round_id, user_id, xp):
     )
     db.add(recommendation)
 
-    student.current_difficulty = new_diff
-    db.add(student)
+    #student.current_difficulty = new_diff
+    #db.add(student)
     db.commit()
 
     # student stats

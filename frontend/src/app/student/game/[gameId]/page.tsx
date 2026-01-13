@@ -16,12 +16,20 @@ type QuestionPayload = {
     answer?: any;
 };
 
-type ReceiveQuestionsPayload = {
+/*type ReceiveQuestionsPayload = {
     game_id: string;
     topic_id: string;
     round_id?: string;
     questions: QuestionPayload[];
+};*/
+
+type ReceiveQuestionPayload = {
+    round_id: string;
+    question: QuestionPayload;
+    difficulty: number;
+    question_index: number;
 };
+
 
 export default function StudentGamePage() {
     const router = useRouter();
@@ -38,7 +46,12 @@ export default function StudentGamePage() {
         }
     };
 
-    const [payload, setPayload] = useState<ReceiveQuestionsPayload | null>(null);
+    /*const [payload, setPayload] = useState<ReceiveQuestionsPayload | null>(null);
+    const [questionIndex, setQuestionIndex] = useState<number>(0);*/
+    const [roundId1, setRoundId1] = useState<string | null>(null);
+    const [topicId, setTopicId] = useState<string | null>(null);
+    const [currentQuestion, setCurrentQuestion] = useState<QuestionPayload | null>(null);
+    const [currentDifficulty, setCurrentDifficulty] = useState<number | null>(null);
     const [questionIndex, setQuestionIndex] = useState<number>(0);
     const [answer, setAnswer] = useState<string>('');
     const [error, setError] = useState<string | null>(null);
@@ -121,7 +134,7 @@ export default function StudentGamePage() {
         return next;
     };
 
-    const currentQuestion = useMemo(() => payload?.questions?.[questionIndex] ?? null, [payload, questionIndex]);
+    //const currentQuestion = useMemo(() => payload?.questions?.[questionIndex] ?? null, [payload, questionIndex]);
 
     const [questionStartedAt, setQuestionStartedAt] = useState<number>(Date.now());
     const [hasSubmitted, setHasSubmitted] = useState<boolean>(false);
@@ -181,7 +194,7 @@ export default function StudentGamePage() {
     };
 
     // Load payload from sessionStorage
-    useEffect(() => {
+    /*useEffect(() => {
         try {
             const raw = sessionStorage.getItem(`game_payload_${gameId}`);
             if (raw) {
@@ -207,78 +220,108 @@ export default function StudentGamePage() {
         } catch {
             // ignore
         }
-    }, [gameId]);
+    }, [gameId]);*/
+
+    const socketRef = useRef<any>(null);
 
     useEffect(() => {
-        const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
-        if (!token) return;
+        const token =
+            typeof window !== "undefined"
+                ? localStorage.getItem("auth_token")
+                : null;
 
-        const socket = getAuthedSocket(token);
+        if (!token || !gameId) return;
+
+        // inicijaliziraj socket samo jednom
+        if (!socketRef.current) {
+            socketRef.current = getAuthedSocket(token);
+
+            socketRef.current.on("connect", () => {
+                console.log("SOCKET CONNECTED:", socketRef.current.id);
+            });
+
+            socketRef.current.on("connect_error", (err: any) => {
+                console.error("SOCKET CONNECT ERROR:", err);
+            });
+        }
+
+        const socket = socketRef.current;
+
         const handleClosed = () => {
-            dlog('gameClosed');
-            setError('Igra je završena');
+            dlog("gameClosed");
+            setError("Igra je završena");
             try {
-                localStorage.removeItem('joined_game_code');
+                localStorage.removeItem("joined_game_code");
                 sessionStorage.removeItem(`game_payload_${gameId}`);
-            } catch {
-                // ignore
-            }
-            router.push('/student/dashboard');
+            } catch {}
+            router.push("/student/dashboard");
         };
-        const handler = (data: any) => {
-            const incomingGameId = String(data?.game_id ?? '');
-            if (incomingGameId && incomingGameId === String(gameId)) {
-                dlog('receiveQuestions', { gameId: incomingGameId, roundId: data?.round_id, count: data?.questions?.length });
-                const incomingRoundId = String(data?.round_id ?? '');
-                if (incomingRoundId && incomingRoundId === (lastRoundIdRef.current || '')) {
-                    return; // ignore duplicate payload
-                }
-                lastRoundIdRef.current = incomingRoundId;
-                resetRoundXpTracking();
-                if (incomingRoundId) allocateRoundIndex(incomingRoundId, token);
-                roundAggRef.current = {
-                    answered: 0,
-                    correct: 0,
-                    totalTimeSecs: 0,
-                    totalHints: 0,
-                    totalQuestions: Array.isArray(data?.questions) ? data.questions.length : 0,
-                };
-                try {
-                    sessionStorage.setItem(`game_payload_${incomingGameId}`, JSON.stringify(data));
-                } catch {
-                    // ignore
-                }
-                setPayload(data as ReceiveQuestionsPayload);
-                setQuestionIndex(0);
-                setRoundFeedback(null);
-                setIsLoadingNextBatch(false);
-                setBatchNumber((n) => (n ? n + 1 : 1));
+
+        const handleRoundStarted = ({ round_id }: any) => {
+            console.log("roundStarted received:", round_id);
+
+            setRoundId1(round_id);
+            setQuestionIndex(0);
+
+            roundAggRef.current = {
+                answered: 0,
+                correct: 0,
+                totalTimeSecs: 0,
+                totalHints: 0,
+                totalQuestions: 0,
+            };
+
+            socket.emit("getNextQuestion", { round_id });
+        };
+
+        const handleReceiveQuestion = (data: ReceiveQuestionPayload) => {
+            setCurrentQuestion(data.question);
+            setCurrentDifficulty(data.difficulty);
+            setQuestionIndex(data.question_index);
+        };
+
+        const handleDifficultyUpdated = ({ new_difficulty }: any) => {
+            setCurrentDifficulty(new_difficulty);
+        };
+
+        const handleFinishRoundError = (d: any) => {
+            dlog("finishRoundError", d);
+            setError(String(d?.message ?? "Greška pri završetku runde"));
+        };
+
+        const handleAnswerSaved = (data: any) => {
+            if (
+                String(data?.question_id ?? "") ===
+                String(currentQuestion?.question_id ?? "")
+            ) {
+                setLastSaveStatus("saved");
             }
         };
 
-        socket.on('receiveQuestions', handler);
-        socket.on('gameClosed', handleClosed);
-        socket.on('finishRoundError', (d: any) => {
-            dlog('finishRoundError', d);
-            setError(String(d?.message ?? 'Greška pri završetku runde'));
-        });
-        socket.on('answerSaved', (data: any) => {
-            if (String(data?.question_id ?? '') === String(currentQuestion?.question_id ?? '')) {
-                setLastSaveStatus('saved');
-            }
-        });
-        socket.on('answerError', () => {
-            setLastSaveStatus('error');
-        });
+        const handleAnswerError = () => {
+            setLastSaveStatus("error");
+        };
+
+        // registracija listenera
+        socket.on("roundStarted", handleRoundStarted);
+        socket.on("receiveQuestion", handleReceiveQuestion);
+        socket.on("difficultyUpdated", handleDifficultyUpdated);
+        socket.on("gameClosed", handleClosed);
+        socket.on("finishRoundError", handleFinishRoundError);
+        socket.on("answerSaved", handleAnswerSaved);
+        socket.on("answerError", handleAnswerError);
 
         return () => {
-            socket.off('receiveQuestions', handler);
-            socket.off('gameClosed', handleClosed);
-            socket.off('finishRoundError');
-            socket.off('answerSaved');
-            socket.off('answerError');
+            socket.off("roundStarted", handleRoundStarted);
+            socket.off("receiveQuestion", handleReceiveQuestion);
+            socket.off("difficultyUpdated", handleDifficultyUpdated);
+            socket.off("gameClosed", handleClosed);
+            socket.off("finishRoundError", handleFinishRoundError);
+            socket.off("answerSaved", handleAnswerSaved);
+            socket.off("answerError", handleAnswerError);
         };
-    }, [gameId, currentQuestion?.question_id, router]);
+    }, [gameId]);
+
 
     // Reset when question changes
     useEffect(() => {
@@ -302,19 +345,27 @@ export default function StudentGamePage() {
         }, 0);
     }, [currentQuestion]);
 
-    const isRoundComplete = Boolean(payload && questionIndex >= (payload.questions?.length ?? 0));
+    //const isRoundComplete = Boolean(payload && questionIndex >= (payload.questions?.length ?? 0));
+    const MAX_QUESTIONS_PER_ROUND = 10;
+    const isRoundComplete = questionIndex >= MAX_QUESTIONS_PER_ROUND;
+
 
     // When a round finishes, notify backend to finalize the round.
     useEffect(() => {
         if (!isRoundComplete) return;
         const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
-        const roundId = String(payload?.round_id ?? '');
+        //const roundId = String(payload?.round_id ?? '');
+        const roundId = roundId1; // iz useState
         if (!token || !roundId) return;
         if (finishedRoundIdsRef.current[roundId]) return;
         finishedRoundIdsRef.current[roundId] = true;
 
         try {
             const socket = getAuthedSocket(token);
+            socket.on('connect', () => {
+                console.log('Socket connected, SID:', socket.id);
+            });
+
             const agg = roundAggRef.current;
             const answered = Math.max(0, Number(agg.answered) || 0);
             const correct = Math.max(0, Number(agg.correct) || 0);
@@ -341,10 +392,11 @@ export default function StudentGamePage() {
             window.setTimeout(() => {
                 void fetchMyXp();
             }, 600);
-        } catch {
+        } catch(err) {
             // ignore
+            console.error("SOCKET ERROR:", err);
         }
-    }, [isRoundComplete, payload?.round_id]);
+    }, [isRoundComplete, roundId1]);
 
     const computeTimeSpentSecs = () => {
         const elapsed = (Date.now() - questionStartedAt) / 1000;
@@ -384,12 +436,13 @@ export default function StudentGamePage() {
             setError('Niste prijavljeni');
             return;
         }
-        if (!payload || !currentQuestion) return;
+        //if (!payload || !currentQuestion) return;
+        if (!currentQuestion || !roundId1) return;
         if (hasSubmitted) return;
 
         const socket = getAuthedSocket(token);
-        const roundId = payload.round_id;
-        if (!roundId) {
+        //const roundId = payload.round_id;
+        if (!roundId1) {
             setError('Nedostaje round_id (backend mora poslati round_id u receiveQuestions)');
             return;
         }
@@ -400,7 +453,7 @@ export default function StudentGamePage() {
 
         // XP logic from backend
         if (isCorrect && numAttemptsToSend === 1) {
-            const totalQ = Math.max(0, Number(payload?.questions?.length ?? 0) || 0);
+            const totalQ = Math.max(0, Number(MAX_QUESTIONS_PER_ROUND ?? 0) || 0);
             if (totalQ > 0) {
                 const nextFirstTry = roundFirstTryCorrectRef.current + 1;
                 const nextRoundXp = Math.floor((nextFirstTry * 100) / totalQ);
@@ -419,12 +472,13 @@ export default function StudentGamePage() {
         }
 
         socket.emit('submit_answer', {
-            round_id: roundId,
+            round_id: roundId1,
             question_id: currentQuestion.question_id,
             is_correct: isCorrect,
             time_spent_secs: timeSpentSecs,
             hints_used: hintClicksThisQuestion,
             num_attempts: numAttemptsToSend,
+            difficulty_at_time: currentDifficulty,
         });
 
         roundAggRef.current.answered += 1;
@@ -435,9 +489,13 @@ export default function StudentGamePage() {
         setHasSubmitted(true);
         setFeedback(isCorrect ? 'Točno!' : 'Netočno!');
 
-        window.setTimeout(() => {
-            setQuestionIndex((idx) => idx + 1);
-        }, 350);
+            //setQuestionIndex((idx) => idx + 1);
+            socket.emit('getNextQuestion', {
+                round_id: roundId1,
+                topic_id: topicId ,
+            });
+
+
     };
 
     const handleAttempt = async () => {
@@ -489,7 +547,7 @@ export default function StudentGamePage() {
         if (batchNumber >= 5) return;
         setRoundFeedback(value);
         const token = localStorage.getItem('auth_token');
-        if (!token || !payload) return;
+        if (!token) return;
         const socket = getAuthedSocket(token);
 
         setIsLoadingNextBatch(true);
@@ -498,7 +556,7 @@ export default function StudentGamePage() {
         // - selectedTopic: { topic_id }
         socket.emit('fetch_new_batch', {
             room_id: gameId,
-            selectedTopic: { topic_id: payload.topic_id },
+            selectedTopic: { topic_id: topicId },
             feedback: value, // optional (backend can ignore for now)
         });
     };
@@ -610,9 +668,7 @@ export default function StudentGamePage() {
                     <>
                         <div className="flex items-center justify-between mb-6 gap-4">
                             <p className="text-sm text-gray-500 dark:text-gray-400">
-                                {payload?.questions?.length
-                                    ? `Pitanje ${Math.min(questionIndex + 1, payload.questions.length)} / ${payload.questions.length}`
-                                    : 'Pitanje'}
+                                Pitanje {questionIndex + 1} / {MAX_QUESTIONS_PER_ROUND}
                             </p>
                             <div className="flex flex-col items-end gap-1">
                                 <div className={`relative flex items-center gap-2 text-2xl font-extrabold text-amber-500 ${styles.xpCounter}`}>
