@@ -7,6 +7,8 @@ import { io, Socket } from 'socket.io-client';
 import { Spinner } from '@/components';
 import { useAuthStore } from '@/lib/store';
 
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+
 export default function TeacherGamePage() {
     const router = useRouter();
     const search = useSearchParams();
@@ -31,6 +33,8 @@ export default function TeacherGamePage() {
     const socketRef = useRef<Socket | null>(null);
     const lastOverrideRefreshAtRef = useRef<number>(0);
     const overrideRefreshTimerRef = useRef<number | null>(null);
+    const closeConfirmingRef = useRef(false);
+    const lastPlayersUpdateAtRef = useRef<number>(0);
 
     const dlog = (...args: any[]) => {
         try {
@@ -59,7 +63,7 @@ export default function TeacherGamePage() {
 
         try {
             const res = await fetch(
-                `${process.env.NEXT_PUBLIC_API_URL}/override/recommendations/${encodeURIComponent(classroomNameToUse)}`,
+                `${API_BASE_URL}/override/recommendations/${encodeURIComponent(classroomNameToUse)}`,
                 { headers: { Authorization: `Bearer ${token}` } },
             );
             if (!res.ok) return;
@@ -102,7 +106,7 @@ export default function TeacherGamePage() {
             return;
         }
 
-        const socket = io(`${process.env.NEXT_PUBLIC_API_URL}`, {
+        const socket = io(API_BASE_URL, {
             transports: ['polling', 'websocket'],
             withCredentials: true,
             auth: { token },
@@ -123,6 +127,9 @@ export default function TeacherGamePage() {
 
         socket.on('updatePlayers', (data: { players?: string[]; playersDetailed?: any[] }) => {
             dlog('updatePlayers', { players: data?.players?.length, detailed: data?.playersDetailed?.length, classroomName });
+            lastPlayersUpdateAtRef.current = Date.now();
+            // If we got here after a `gameClosed`, it means the game is still active and we should ignore the close.
+            if (closeConfirmingRef.current) closeConfirmingRef.current = false;
             setPlayers(data?.players ?? []);
             if (Array.isArray(data?.playersDetailed)) {
                 const mapped = data.playersDetailed
@@ -162,22 +169,49 @@ export default function TeacherGamePage() {
         });
 
         socket.on('gameClosed', () => {
-            setError('Igra je zatvorena');
+            // Teacher ended the game
+            const since = Date.now();
+            closeConfirmingRef.current = true;
+            dlog('gameClosed (confirming...)');
+
+            try {
+                socket.emit('teacherJoin', { game_id: gameId, mode: 'game' });
+            } catch {
+                // ignore
+            }
+
+            window.setTimeout(() => {
+                // igra aktivna ako smo dobili updatePlayers nakon gameClosed
+                if (lastPlayersUpdateAtRef.current > since) return;
+                // ako smo dobili updatePlayers nakon gameClosed, ne brisemo UI
+                if (closeConfirmingRef.current) {
+                    dlog('gameClosed not confirmed; keeping UI running');
+                    closeConfirmingRef.current = false;
+                }
+            }, 900);
         });
 
         socket.on('error', (data: { message?: string }) => {
-            setError(data?.message || 'Greška');
+            const msg = String(data?.message || 'Greška');
+            if (closeConfirmingRef.current) {
+                // ako je poruka about already finished, brisemo UI
+                if (msg.toLowerCase().includes('already finished')) {
+                    closeConfirmingRef.current = false;
+                    setError('Igra je zatvorena');
+                    return;
+                }
+                // ako je poruka about invalid game, brisemo UI
+                dlog('error while confirming close; ignoring', msg);
+                closeConfirmingRef.current = false;
+                return;
+            }
+            setError(msg);
         });
 
         return () => {
             if (overrideRefreshTimerRef.current) {
                 window.clearTimeout(overrideRefreshTimerRef.current);
                 overrideRefreshTimerRef.current = null;
-            }
-            // End game
-            try {
-                socket.emit('endGame', { game_id: gameId });
-            } catch {
             }
             socket.disconnect();
             socketRef.current = null;
@@ -191,7 +225,7 @@ export default function TeacherGamePage() {
 
         const run = async () => {
             try {
-                const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/classroom/my-classrooms`, {
+                const res = await fetch(`${API_BASE_URL}/classroom/my-classrooms`, {
                     headers: { Authorization: `Bearer ${token}` },
                 });
                 if (!res.ok) return;
@@ -250,7 +284,7 @@ export default function TeacherGamePage() {
         setError(null);
         try {
             dlog('override click', { studentUsername, direction });
-            const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/override/`, {
+            const res = await fetch(`${API_BASE_URL}/override/`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -292,7 +326,7 @@ export default function TeacherGamePage() {
         accuracy?: number | null;
         avg_time_secs?: number | null;
         hints_used?: number | null;
-        }) => {
+    }) => {
         if (p.level === p.previous_level) return null;
 
         const direction = p.level > p.previous_level ? 'povećali' : 'smanjili';
@@ -355,22 +389,43 @@ export default function TeacherGamePage() {
                     </div>
                 ) : (
                     <div
-                        className="rounded-xl border p-3"
+                        className="rounded-2xl border overflow-hidden"
                         style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}
                     >
                         <div className="max-h-72 overflow-auto">
                             <table className="w-full text-sm border-collapse">
-                                <thead>
-                                    <tr className="text-left border-b">
-                                        <th className="py-2 px-2">Ime</th>
-                                        <th className="py-2 px-2">XP</th>
-                                        <th className="py-2 px-2">Prijašnji lvl</th>
-                                        <th className="py-2 px-2">Trenutni lvl</th>
-                                        <th className="py-2 px-2">Razlog</th>
-                                        <th className="py-2 px-2 text-center">Override</th>
+                                <thead
+                                    className="sticky top-0 z-10 border-b"
+                                    style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}
+                                >
+                                    <tr className="text-left">
+                                        <th className="py-3 px-3 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 text-center w-14">
+                                            &nbsp;
+                                        </th>
+                                        <th className="py-3 px-3 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 text-center w-16">
+                                            #
+                                        </th>
+                                        <th className="py-3 px-3 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 w-52">
+                                            Ime
+                                        </th>
+                                        <th className="py-3 px-3 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 text-right w-24">
+                                            XP
+                                        </th>
+                                        <th className="py-3 px-3 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 text-center w-28">
+                                            Prijašnji lvl
+                                        </th>
+                                        <th className="py-3 px-3 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 text-center w-28">
+                                            Trenutni lvl
+                                        </th>
+                                        <th className="py-3 px-3 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 w-[55%]">
+                                            Razlog
+                                        </th>
+                                        <th className="py-3 px-3 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 text-center w-28">
+                                            Override
+                                        </th>
                                     </tr>
                                 </thead>
-                                <tbody>
+                                <tbody className="divide-y" style={{ borderColor: 'var(--card-border)' }}>
                                     {(playersDetailed.length
                                         ? playersDetailed
                                         : players.map((p) => ({
@@ -380,50 +435,74 @@ export default function TeacherGamePage() {
                                     ).map((p: any) => (
                                         <tr
                                             key={p.user_id}
-                                            className="border-b last:border-b-0 hover:bg-gray-50 dark:hover:bg-gray-800/40"
+                                            className="hover:bg-gray-50/80 dark:hover:bg-gray-800/40"
                                         >
+                                            {/* Avatar */}
+                                            <td className="py-3 px-3 align-middle text-center">
+                                                <span
+                                                    className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-800 border"
+                                                    style={{ borderColor: 'var(--card-border)' }}
+                                                    aria-hidden="true"
+                                                >
+                                                    <span className="text-sm font-semibold text-gray-700 dark:text-gray-200">
+                                                        {String(p.username || '?').charAt(0).toUpperCase()}
+                                                    </span>
+                                                </span>
+                                            </td>
+
+                                            {/* Rank */}
+                                            <td className="py-3 px-3 align-middle text-center tabular-nums text-gray-600 dark:text-gray-300">
+                                                {typeof p.rank === 'number' && p.rank > 0 ? `#${p.rank}` : '—'}
+                                            </td>
+
                                             {/* Ime */}
-                                            <td className="py-2 px-2 flex items-center gap-2">
-                                                <i className="fa-regular fa-user text-gray-400" />
-                                                <span className="truncate">{p.username}</span>
+                                            <td className="py-3 px-3 align-middle">
+                                                <div className="font-medium text-gray-900 dark:text-gray-100 truncate">
+                                                    {p.username}
+                                                </div>
                                             </td>
 
                                             {/* XP */}
-                                            <td className="py-2 px-2 tabular-nums">
-                                                {p.xp ?? '—'}
+                                            <td className="py-3 px-3 align-middle tabular-nums text-right text-gray-900 dark:text-gray-100">
+                                                {typeof p.xp === 'number' ? p.xp : '—'}
                                             </td>
 
                                             {/* Prijašnji level */}
-                                            <td className="py-2 px-2 text-center">
-                                                {p.previous_level ?? '—'}
+                                            <td className="py-3 px-3 align-middle text-center">
+                                                <span className="inline-flex items-center justify-center px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200">
+                                                    {typeof p.previous_level === 'number' ? p.previous_level : '—'}
+                                                </span>
                                             </td>
 
                                             {/* Trenutni level */}
-                                            <td className="py-2 px-2 text-center">
-                                                <span className="px-2 py-1 rounded-full text-xs bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300">
-                                                    {p.level ?? '—'}
+                                            <td className="py-3 px-3 align-middle text-center">
+                                                <span className="inline-flex items-center justify-center px-2.5 py-1 rounded-full text-xs font-semibold bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300">
+                                                    {typeof p.level === 'number' ? p.level : '—'}
                                                 </span>
                                             </td>
 
                                             {/* Razlog */}
-                                            <td className="py-2 px-2 max-w-xs">
-                                                {renderReason(p)}
+                                            <td className="py-3 px-3 align-middle w-[55%]">
+                                                <div className="text-xs leading-snug text-gray-600 dark:text-gray-300">
+                                                    {renderReason(p) || <span className="text-gray-400">—</span>}
+                                                </div>
                                             </td>
 
                                             {/* Strelica */}
-                                            <td className="py-2 px-2 text-center">
+                                            <td className="py-3 px-3 align-middle text-center">
                                                 {overrideEligible[p.username] ? (
-                                                    <div className="flex items-center justify-center gap-1">
+                                                    <div className="inline-flex items-center justify-center gap-2">
                                                         <button
                                                             onClick={() => handleOverride(p.username, 'down')}
                                                             disabled={
                                                                 overrideLoading[p.username] !== undefined &&
                                                                 overrideLoading[p.username] !== null
                                                             }
-                                                            className="btn btn-outline !py-1 !px-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                            className="inline-flex items-center justify-center w-9 h-9 rounded-xl border bg-white/60 dark:bg-gray-900/20 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                                            style={{ borderColor: 'var(--card-border)' }}
                                                             title="Smanji level"
                                                         >
-                                                            <i className="fa-solid fa-arrow-down" />
+                                                            <i className="fa-solid fa-arrow-down text-red-500" />
                                                         </button>
 
                                                         <button
@@ -432,10 +511,11 @@ export default function TeacherGamePage() {
                                                                 overrideLoading[p.username] !== undefined &&
                                                                 overrideLoading[p.username] !== null
                                                             }
-                                                            className="btn btn-outline !py-1 !px-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                            className="inline-flex items-center justify-center w-9 h-9 rounded-xl border bg-white/60 dark:bg-gray-900/20 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                                            style={{ borderColor: 'var(--card-border)' }}
                                                             title="Povećaj level"
                                                         >
-                                                            <i className="fa-solid fa-arrow-up" />
+                                                            <i className="fa-solid fa-arrow-up text-emerald-600" />
                                                         </button>
                                                     </div>
                                                 ) : (
