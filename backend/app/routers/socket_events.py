@@ -5,6 +5,7 @@ import uuid
 from functools import partial
 
 from app.main import sio
+
 from sqlalchemy import case, desc, func
 from sqlalchemy.orm import Session
 
@@ -18,6 +19,7 @@ from ..models.recommendations import Recommendation
 from ..models.rounds import Round
 from ..models.student_stats import StudentStats
 from ..models.users import User
+from ..models.teacher_actions import TeacherAction
 from .ml_feedback import FeedbackRequest, derive_true_label, feedback_function
 from .ml_predict import DifficultyRequest, predict_function
 from .socket_auth import authenticate_socket_with_token
@@ -865,7 +867,25 @@ async def finalize_round(db: Session, round_id, user_id, xp):
     )
     db.add(recommendation)
 
-    student.current_difficulty = new_diff
+    #value teacher override over model recommendation
+    #1. fetch newest teacher action for student 
+    teacher_override = db.query(TeacherAction).filter(TeacherAction.user_id == student.id).order_by(TeacherAction.created_at.desc()).first()
+    
+    #2. check if teacher override was created during last students round
+    #returns true if teacher action was created during the last round or ongoing round
+    is_override_in_round = (
+        teacher_override is not None
+        and teacher_override.created_at >= round_obj.start_ts
+        and (round_obj.end_ts is None or teacher_override.created_at <= round_obj.end_ts)
+    )
+
+    #3. if no override in round apply model recommendation
+    if not is_override_in_round:
+        student.current_difficulty = new_diff
+    else:
+        student.current_difficulty = student.current_difficulty
+         
+    #apply
     db.add(student)
     db.commit()
 
@@ -898,7 +918,7 @@ async def finalize_round(db: Session, round_id, user_id, xp):
         (old_accuracy * old_attempts) + (round_accuracy * round_attempts)
     ) / new_attempts
 
-    # XP (podlozno promjeni ovisi kak se dogovorimo)
+    
     xp_gained = xp
 
     stats.total_attempts = new_attempts
