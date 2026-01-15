@@ -20,9 +20,12 @@ from ..models.rounds import Round
 from ..models.student_stats import StudentStats
 from ..models.users import User
 from ..models.teacher_actions import TeacherAction
+from ..models.logs import Logs
 from .ml_feedback import FeedbackRequest, derive_true_label, feedback_function
 from .ml_predict import DifficultyRequest, predict_function
 from .socket_auth import authenticate_socket_with_token
+import asyncio
+
 
 questions = {}
 
@@ -927,3 +930,80 @@ async def finalize_round(db: Session, round_id, user_id, xp):
 
     db.add(stats)
     db.commit()
+
+
+#BACKUP PLAN -> bad database performance
+@sio.event
+async def log(sid, data):
+    db = SessionLocal()
+    try:
+        session = await sio.get_session(sid)
+        if not session:
+            return
+
+        user_id = session["user_id"]
+        
+        created_at = datetime.fromisoformat(data["timestamp"])
+        log_text = data["text"]
+
+        new_log = Logs(created_at=created_at,
+                        user_id=user_id,
+                        log=log_text)
+
+        db.add(new_log)
+        db.commit()
+
+    except:
+        db.rollback()
+        raise
+
+    finally:
+        db.close()
+
+
+log_queue = asyncio.Queue()
+
+
+#TO BE USED -> commits to database in batches
+@sio.event
+async def log_batched(sid, data):
+    session = await sio.get_session(sid)
+    if not session:
+        return
+
+    created_at = datetime.fromisoformat(data["timestamp"])
+    await log_queue.put({
+        "user_id": session["user_id"],
+        "timestamp": created_at, #potential issue
+        "text": data["text"],
+    })
+
+
+async def log_writer():
+    while True:
+        batch = []
+
+        # wait for at least one
+        item = await log_queue.get()
+        batch.append(item)
+
+        # grab more for 100ms
+        try:
+            while True:
+                batch.append(await asyncio.wait_for(log_queue.get(), 0.1))
+        except asyncio.TimeoutError:
+            pass
+
+        db = SessionLocal()
+        try:
+            for log in batch:
+                db.add(Logs(
+                    user_id=log["user_id"],
+                    created_at=log["timestamp"], #POTENTIAL ISSUE
+                    log=log["text"]
+                ))
+            db.commit()
+        except: 
+            print("Could not commit batch to the database")
+        finally:
+            db.close()
