@@ -1,33 +1,115 @@
 import asyncio
 import datetime
+import json
 import random
 import uuid
 from functools import partial
 
 from app.main import sio
-
-from sqlalchemy import case, desc, func
+from sqlalchemy import case, desc, func, text
+from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.orm import Session
 
 from ..db import SessionLocal
 from ..models.attempts import Attempt
 from ..models.game import Game
 from ..models.game_players import GamePlayers
+from ..models.logs import Logs
 from ..models.num_answer import NumAnswer
 from ..models.questions import Question
 from ..models.recommendations import Recommendation
 from ..models.rounds import Round
 from ..models.student_stats import StudentStats
-from ..models.users import User
 from ..models.teacher_actions import TeacherAction
-from ..models.logs import Logs
+from ..models.users import User
 from .ml_feedback import FeedbackRequest, derive_true_label, feedback_function
 from .ml_predict import DifficultyRequest, predict_function
 from .socket_auth import authenticate_socket_with_token
-import asyncio
-
 
 questions = {}
+
+
+def _utc_now() -> datetime.datetime:
+    return datetime.datetime.now(datetime.timezone.utc)
+
+
+def _parse_client_timestamp(ts) -> datetime.datetime:
+    """
+    Accepts:
+      - ISO string with `Z` or `+00:00`
+      - epoch ms (int/float)
+    Returns timezone-aware UTC datetime.
+    """
+    if ts is None:
+        return _utc_now()
+
+    # epoch ms
+    if isinstance(ts, (int, float)):
+        return datetime.datetime.fromtimestamp(
+            float(ts) / 1000.0, tz=datetime.timezone.utc
+        )
+
+    if isinstance(ts, str):
+        s = ts.strip()
+        if s.endswith("Z"):
+            s = s[:-1] + "+00:00"
+        try:
+            dt = datetime.datetime.fromisoformat(s)
+        except Exception:
+            return _utc_now()
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=datetime.timezone.utc)
+        return dt.astimezone(datetime.timezone.utc)
+
+    return _utc_now()
+
+
+def _logs_columns(db: Session) -> set[str]:
+    try:
+        insp = sa_inspect(db.get_bind())
+        cols = insp.get_columns("logs") or []
+        return {str(c.get("name")) for c in cols if c.get("name")}
+    except Exception:
+        return set()
+
+
+def _insert_log_row(
+    db: Session, created_at: datetime.datetime, user_id_raw: str, log_text: str
+) -> None:
+    """ insert into logs table """
+    cols = _logs_columns(db)
+
+    has_created_at = "created_at" in cols
+    # DB might use `student_id` (FK) instead of `user_id`.
+    fk_col = (
+        "student_id"
+        if "student_id" in cols
+        else ("user_id" if "user_id" in cols else None)
+    )
+
+    params: dict[str, object] = {"log": log_text}
+    col_names: list[str] = []
+    placeholders: list[str] = []
+
+    if fk_col:
+        col_names.append(fk_col)
+        placeholders.append(f":{fk_col}")
+        params[fk_col] = str(user_id_raw or "")
+
+    if has_created_at:
+        col_names.append("created_at")
+        placeholders.append(":created_at")
+        params["created_at"] = created_at
+
+    col_names.append("log")
+    placeholders.append(":log")
+
+    db.execute(
+        text(
+            f"INSERT INTO logs ({', '.join(col_names)}) VALUES ({', '.join(placeholders)})"
+        ),
+        params,
+    )
 
 
 def _finish_game(db: Session, game: Game) -> None:
@@ -838,7 +920,7 @@ async def finalize_round(db: Session, round_id, user_id, xp):
                     partial(feedback_function, feedback_req)              
                 )
             except Exception as e:
-                print(f'FEEDBACK ERROR: {str(e)}')
+                print(f"FEEDBACK ERROR: {str(e)}")
                 import traceback
                 traceback.print_exc()
 
@@ -873,7 +955,7 @@ async def finalize_round(db: Session, round_id, user_id, xp):
     #value teacher override over model recommendation
     #1. fetch newest teacher action for student 
     teacher_override = db.query(TeacherAction).filter(TeacherAction.user_id == student.id).order_by(TeacherAction.created_at.desc()).first()
-    
+
     #2. check if teacher override was created during last students round
     #returns true if teacher action was created during the last round or ongoing round
     is_override_in_round = (
@@ -921,7 +1003,6 @@ async def finalize_round(db: Session, round_id, user_id, xp):
         (old_accuracy * old_attempts) + (round_accuracy * round_attempts)
     ) / new_attempts
 
-    
     xp_gained = xp
 
     stats.total_attempts = new_attempts
@@ -932,7 +1013,7 @@ async def finalize_round(db: Session, round_id, user_id, xp):
     db.commit()
 
 
-#BACKUP PLAN -> bad database performance
+# BACKUP PLAN -> bad database performance
 @sio.event
 async def log(sid, data):
     db = SessionLocal()
@@ -941,21 +1022,42 @@ async def log(sid, data):
         if not session:
             return
 
-        user_id = session["user_id"]
-        
-        created_at = datetime.fromisoformat(data["timestamp"])
-        log_text = data["text"]
+        user_id = str(session.get("user_id") or "")
+        timestamp = data.get("timestamp") if isinstance(data, dict) else None
+        created_at = _parse_client_timestamp(timestamp)
 
-        new_log = Logs(created_at=created_at,
-                        user_id=user_id,
-                        log=log_text)
+        # Allow either `text` (string) or a dict payload; store JSON string.
+        if isinstance(data, dict) and "text" in data:
+            log_text = str(data.get("text") or "")
+        else:
+            log_text = json.dumps(
+                data, ensure_ascii=False, separators=(",", ":"), default=str
+            )
 
-        db.add(new_log)
+        # Ensure user_id is always present in the stored JSON for later analysis.
+        try:
+            parsed = json.loads(log_text)
+            if isinstance(parsed, dict):
+                parsed.setdefault("user_id", user_id)
+                parsed.setdefault("server_ts_iso", _utc_now().isoformat())
+                log_text = json.dumps(
+                    parsed, ensure_ascii=False, separators=(",", ":"), default=str
+                )
+        except Exception:
+            pass
+
+        _insert_log_row(
+            db, created_at=created_at, user_id_raw=user_id, log_text=log_text
+        )
         db.commit()
 
-    except:
+    except Exception as e:
         db.rollback()
-        raise
+        try:
+            print(f"[logs] log failed: {e}")
+        except Exception:
+            pass
+        return
 
     finally:
         db.close()
@@ -964,19 +1066,24 @@ async def log(sid, data):
 log_queue = asyncio.Queue()
 
 
-#TO BE USED -> commits to database in batches
+# TO BE USED -> commits to database in batches
 @sio.event
 async def log_batched(sid, data):
     session = await sio.get_session(sid)
     if not session:
         return
 
-    created_at = datetime.fromisoformat(data["timestamp"])
-    await log_queue.put({
-        "user_id": session["user_id"],
-        "timestamp": created_at, #potential issue
-        "text": data["text"],
-    })
+    # Keep event for future batching, but make it safe with timestamps.
+    timestamp = data.get("timestamp") if isinstance(data, dict) else None
+    created_at = _parse_client_timestamp(timestamp)
+    text_value = data.get("text") if isinstance(data, dict) else None
+    await log_queue.put(
+        {
+            "user_id": str(session.get("user_id") or ""),
+            "timestamp": created_at,
+            "text": str(text_value or ""),
+        }
+    )
 
 
 async def log_writer():
@@ -997,13 +1104,18 @@ async def log_writer():
         db = SessionLocal()
         try:
             for log in batch:
-                db.add(Logs(
-                    user_id=log["user_id"],
-                    created_at=log["timestamp"], #POTENTIAL ISSUE
-                    log=log["text"]
-                ))
+                db.add(
+                    Logs(
+                        user_id=log["user_id"],
+                        created_at=log["timestamp"],  # POTENTIAL ISSUE
+                        log=log["text"],
+                    )
+                )
             db.commit()
-        except: 
-            print("Could not commit batch to the database")
+        except Exception as e:
+            try:
+                print(f"[logs] Could not commit batch to the database: {e}")
+            except Exception:
+                pass
         finally:
             db.close()
