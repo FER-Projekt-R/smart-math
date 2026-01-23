@@ -60,6 +60,7 @@ export default function StudentGamePage() {
     const roundFirstTryCorrectRef = useRef<number>(0);
     const [showWrongOverlay, setShowWrongOverlay] = useState(false);
     const roundXpEarnedRef = useRef<number>(0);
+    const [showRoundSummary, setShowRoundSummary] = useState(false);
     const roundAggRef = useRef<{
         answered: number;
         correct: number;
@@ -368,6 +369,24 @@ export default function StudentGamePage() {
             // ignore
         }
     }, [isRoundComplete, payload?.round_id]);
+
+    useEffect(() => {
+        if (isRoundComplete) {
+            setShowRoundSummary(true);
+        }
+    }, [isRoundComplete]);
+
+    const encouragementMessage = useMemo(() => {
+        if (roundFirstTryCorrect >= 7) {
+            return 'Odlično ti ide! Samo tako nastavi!';
+        }
+        if (roundFirstTryCorrect >= 4) {
+            return 'Super trud! Svakim pitanjem sve više napreduješ';
+        }
+        return 'Bravo za trud! Idemo po još više bodova...';
+    }, [roundFirstTryCorrect]);
+
+
 
     const computeTimeSpentSecs = () => {
         const elapsed = (Date.now() - questionStartedAt) / 1000;
@@ -842,6 +861,34 @@ export default function StudentGamePage() {
                     />
                 </div>
             )}
+
+            {showRoundSummary && (
+                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+                    <div className="card p-6 max-w-md w-full text-center animate-scaleIn">
+                    <i className="fa-solid fa-star text-5xl text-amber-400 mb-3" />
+
+                    <h3 className="text-xl font-bold mb-2">
+                        Završena runda!
+                    </h3>
+
+                    <p className="text-sm text-gray-600 dark:text-gray-300 mb-4">
+                        Trenutno imaš <strong>{xp}</strong> zvjezdica ⭐
+                    </p>
+
+                    <p className="text-base mb-6">
+                        {encouragementMessage}
+                    </p>
+
+                    <button
+                        onClick={() => setShowRoundSummary(false)}
+                        className="btn btn-primary w-full py-3"
+                    >
+                        Nastavi dalje
+                    </button>
+                    </div>
+                </div>
+            )}
+
 
 
         </main>
