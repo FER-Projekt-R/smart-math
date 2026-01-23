@@ -10,6 +10,8 @@ from .routers.game_router import router as game_router
 from .routers.topics_router import router as topics_router
 from .routers.stats_router import router as stats_router
 from .routers.override_router import router as override_router
+#from .routers.socket_events import log_writer
+import asyncio
 
 sio = socketio.AsyncServer(
     async_mode="asgi",
@@ -60,3 +62,9 @@ def root():
     return "Backend is running!"
 
 from .routers import socket_events  # noqa: E402, F401
+
+#start background writer to save logs
+@fastapi_app.on_event("startup")
+async def start_background_tasks():
+    asyncio.create_task(socket_events.log_writer())
+

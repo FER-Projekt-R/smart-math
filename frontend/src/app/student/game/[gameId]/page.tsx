@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { Spinner } from '@/components';
 import { disconnectSocket, getAuthedSocket } from '@/lib/realtime/socket';
+import { logStudentEvent } from '@/lib/realtime/student-logging';
 import { useAuthStore } from '@/lib/store';
 import styles from './xpBurst.module.css';
 
@@ -59,6 +60,7 @@ export default function StudentGamePage() {
     const roundFirstTryCorrectRef = useRef<number>(0);
     const [showWrongOverlay, setShowWrongOverlay] = useState(false);
     const roundXpEarnedRef = useRef<number>(0);
+    const [showRoundSummary, setShowRoundSummary] = useState(false);
     const roundAggRef = useRef<{
         answered: number;
         correct: number;
@@ -234,6 +236,12 @@ export default function StudentGamePage() {
                     return; // ignore duplicate payload
                 }
                 lastRoundIdRef.current = incomingRoundId;
+                logStudentEvent(token, 'round_started', {
+                    game_id: incomingGameId,
+                    topic_id: String(data?.topic_id ?? ''),
+                    round_id: incomingRoundId,
+                    question_count: Array.isArray(data?.questions) ? data.questions.length : null,
+                });
                 resetRoundXpTracking();
                 if (incomingRoundId) allocateRoundIndex(incomingRoundId, token);
                 roundAggRef.current = {
@@ -292,6 +300,22 @@ export default function StudentGamePage() {
         setIsHintOpen(false);
         const start = Date.now();
         setQuestionStartedAt(start);
+        try {
+            const token = localStorage.getItem('auth_token');
+            if (token) {
+                logStudentEvent(token, 'question_started', {
+                    game_id: gameId,
+                    round_id: String(payload?.round_id ?? ''),
+                    question_id: String(currentQuestion?.question_id ?? ''),
+                    question_index: questionIndex,
+                    batch_number: batchNumber,
+                    question_difficulty: currentQuestion?.difficulty ?? null,
+                    question_text: String(currentQuestion?.question ?? '').slice(0, 240),
+                });
+            }
+        } catch {
+            // ignore
+        }
         window.setTimeout(() => {
             try {
                 answerInputRef.current?.focus();
@@ -346,9 +370,49 @@ export default function StudentGamePage() {
         }
     }, [isRoundComplete, payload?.round_id]);
 
+    useEffect(() => {
+        if (isRoundComplete) {
+            setShowRoundSummary(true);
+        }
+    }, [isRoundComplete]);
+
+    const encouragementMessage = useMemo(() => {
+        if (roundFirstTryCorrect >= 7) {
+            return 'Odlično ti ide! Samo tako nastavi!';
+        }
+        if (roundFirstTryCorrect >= 4) {
+            return 'Super trud! Svakim pitanjem sve više napreduješ';
+        }
+        return 'Bravo za trud! Idemo po još više bodova...';
+    }, [roundFirstTryCorrect]);
+
+
+
     const computeTimeSpentSecs = () => {
         const elapsed = (Date.now() - questionStartedAt) / 1000;
         return Math.max(0, Math.round(elapsed));
+    };
+
+    const buildSubmitPayload = (overrides?: Record<string, unknown>) => {
+        const isCorrectNow = computeIsCorrect();
+        const studentLevel =
+            user && user.role === 'student'
+                ? (xp ? Math.max(1, Math.floor(xp / 100)) : null)
+                : null;
+        return {
+            game_id: gameId,
+            round_id: String(payload?.round_id ?? ''),
+            question_id: String(currentQuestion?.question_id ?? ''),
+            question_index: questionIndex,
+            question_difficulty: currentQuestion?.difficulty ?? null,
+            question_text: String(currentQuestion?.question ?? '').slice(0, 240),
+            student_level: studentLevel,
+            answer_value: String(answer ?? '').trim().slice(0, 200),
+            hints_used: hintClicksThisQuestion,
+            time_spent_secs: computeTimeSpentSecs(),
+            is_correct: isCorrectNow,
+            ...overrides,
+        };
     };
 
     const computeIsCorrect = () => {
@@ -376,7 +440,7 @@ export default function StudentGamePage() {
         return 'To je točan broj.';
     };
 
-    const finalizeQuestion = async (attemptsOverride?: number) => {
+    const finalizeQuestion = async (attemptsOverride?: number, source?: 'button' | 'enter') => {
         setError(null);
         setLastSaveStatus('saving');
         const token = localStorage.getItem('auth_token');
@@ -440,7 +504,7 @@ export default function StudentGamePage() {
         }, 350);
     };
 
-    const handleAttempt = async () => {
+    const handleAttempt = async (source: 'button' | 'enter') => {
         if (!currentQuestion || hasSubmitted) return;
         setFeedback(null);
         setError(null);
@@ -449,9 +513,25 @@ export default function StudentGamePage() {
         setAttemptsThisQuestion(nextAttempts);
 
         const isCorrect = computeIsCorrect();
+        try {
+            const token = localStorage.getItem('auth_token');
+            if (token) {
+                logStudentEvent(token, 'submit_clicked', {
+                    ...buildSubmitPayload({
+                        submit_source: source,
+                        attempt_number: nextAttempts,
+                        num_attempts: nextAttempts,
+                        is_correct: isCorrect,
+                        will_send_to_backend: isCorrect,
+                    }),
+                });
+            }
+        } catch {
+            // ignore
+        }
         if (isCorrect) {
             setLastAttemptWasWrong(false);
-            await finalizeQuestion(nextAttempts);
+            await finalizeQuestion(nextAttempts, source);
         } else {
             setLastAttemptWasWrong(true);
             setFeedback('Netočno, pokušaj ponovno');
@@ -469,8 +549,22 @@ export default function StudentGamePage() {
 
     const openHint = () => {
         if (!canShowHintButton) return;
-        setHintClicksThisQuestion((h) => h + 1);
+        const nextHintClicks = hintClicksThisQuestion + 1;
+        setHintClicksThisQuestion(nextHintClicks);
         setIsHintOpen(true);
+        try {
+            const token = localStorage.getItem('auth_token');
+            if (token) {
+                logStudentEvent(token, 'hint_clicked', {
+                    hint_click_number: nextHintClicks,
+                    ...buildSubmitPayload({
+                        is_correct: computeIsCorrect(),
+                    }),
+                });
+            }
+        } catch {
+            // ignore
+        }
     };
 
     const handleLeaveGame = () => {
@@ -651,7 +745,7 @@ export default function StudentGamePage() {
                                     if ('isComposing' in (e.nativeEvent as any) && (e.nativeEvent as any).isComposing) return;
                                     if (e.key === 'Enter') {
                                         e.preventDefault();
-                                        void handleAttempt();
+                                        void handleAttempt('enter');
                                     }
                                 }}
                                 className="w-full px-4 py-3 rounded-xl border bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 outline-none"
@@ -670,7 +764,7 @@ export default function StudentGamePage() {
                                 </button>
                             )}
                             <button
-                                onClick={() => void handleAttempt()}
+                                onClick={() => void handleAttempt('button')}
                                 disabled={hasSubmitted}
                                 className="btn btn-primary w-full py-3 disabled:opacity-50 disabled:cursor-not-allowed"
                             >
@@ -767,6 +861,34 @@ export default function StudentGamePage() {
                     />
                 </div>
             )}
+
+            {showRoundSummary && (
+                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+                    <div className="card p-6 max-w-md w-full text-center animate-scaleIn">
+                    <i className="fa-solid fa-star text-5xl text-amber-400 mb-3" />
+
+                    <h3 className="text-xl font-bold mb-2">
+                        Završena runda!
+                    </h3>
+
+                    <p className="text-sm text-gray-600 dark:text-gray-300 mb-4">
+                        Trenutno imaš <strong>{xp}</strong> zvjezdica ⭐
+                    </p>
+
+                    <p className="text-base mb-6">
+                        {encouragementMessage}
+                    </p>
+
+                    <button
+                        onClick={() => setShowRoundSummary(false)}
+                        className="btn btn-primary w-full py-3"
+                    >
+                        Nastavi dalje
+                    </button>
+                    </div>
+                </div>
+            )}
+
 
 
         </main>
