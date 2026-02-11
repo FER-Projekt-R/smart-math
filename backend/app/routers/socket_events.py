@@ -375,7 +375,9 @@ async def emit_players(game_id):
             {
                 "user_id": str(r.user_id),
                 "username": r.username,
-                "level": int(r.level or 1),
+                "level_brojevi_do_sto": int(r.level_brojevi_do_sto or 1),
+                "level_mnozenje_dijeljenje": int(r.level_mnozenje_dijeljenje or 1),
+                "level_zbrajanje_oduzimanje": int(r.level_zbrajanje_oduzimanje or 1),
                 "xp": int(r.xp or 0),
                 "rank": int(rank_by_user_id.get(str(r.user_id), 0) or 0),
                 **(rec_map.get(str(r.user_id)) or {}),
