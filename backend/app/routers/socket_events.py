@@ -576,14 +576,14 @@ async def startGame(sid, data):
             if not student:
                 continue
 
-            topic_name = (db.query(Topic).filter(Topic.id == topic_id).first())
+            topic = (db.query(Topic).filter(Topic.id == topic_id).first())
             user_questions = None
 
-            if(topic_name == "Brojevi do 100"):
+            if(topic.name == "Brojevi do 100"):
                 user_questions = generate_questions(db, topic_id, student.difficulty_do_sto)
-            elif (topic_name == "Množenje i dijeljenje"):
+            elif (topic.name == "Množenje i dijeljenje"):
                 user_questions = generate_questions(db, topic_id, student.difficulty_mnozenje)
-            elif (topic_name == "Zbrajanje i oduzimanje"):
+            elif (topic.name == "Zbrajanje i oduzimanje"):
                 user_questions = generate_questions(db, topic_id, student.difficulty_zbrajanje)
             
         
@@ -776,14 +776,14 @@ async def fetch_new_batch(sid, data):
             await sio.emit("error", {"message": "User not found"}, to=sid)
             return
 
-        topic_name = (db.query(Topic).filter(Topic.id == topic_id).first())
+        topic = (db.query(Topic).filter(Topic.id == topic_id).first())
         user_questions = None
             
-        if(topic_name == "Brojevi do 100"): 
+        if(topic.name == "Brojevi do 100"): 
             user_questions = generate_questions(db, topic_id, student.difficulty_do_sto)
-        elif (topic_name == "Množenje i dijeljenje"):
+        elif (topic.name == "Množenje i dijeljenje"):
             user_questions = generate_questions(db, topic_id, student.difficulty_mnozenje)
-        elif (topic_name == "Zbrajanje i oduzimanje"):
+        elif (topic.name == "Zbrajanje i oduzimanje"):
             user_questions = generate_questions(db, topic_id, student.difficulty_zbrajanje)
         
 
@@ -865,15 +865,15 @@ async def finish_round(sid, data):
 async def finalize_round(db: Session, round_id, user_id, xp, topic_id ):
     student = db.query(User).filter((User.id == user_id)).first()
 
-    topic_name = (db.query(Topic).filter(Topic.id == topic_id).first())
+    topic = (db.query(Topic).filter(Topic.id == topic_id).first())
 
 
     topic_difficulty = 3
-    if(topic_name == "Brojevi do 100"):
+    if(topic.name == "Brojevi do 100"):
         topic_difficulty = student.difficulty_do_sto
-    elif (topic_name == "Množenje i dijeljenje"):
+    elif (topic.name == "Množenje i dijeljenje"):
         topic_difficulty = student.difficulty_mnozenje
-    elif (topic_name == "Zbrajanje i oduzimanje"):
+    elif (topic.name == "Zbrajanje i oduzimanje"):
         topic_difficulty = student.difficulty_zbrajanje
             
 
@@ -1006,11 +1006,11 @@ async def finalize_round(db: Session, round_id, user_id, xp, topic_id ):
     else:
         topic_difficulty = topic_difficulty = student
 
-    if(topic_name == "Brojevi do 100"):
+    if(topic.name == "Brojevi do 100"):
         student.difficulty_do_sto = topic_difficulty
-    elif (topic_name == "Množenje i dijeljenje"):
+    elif (topic.name == "Množenje i dijeljenje"):
         student.difficulty_mnozenje = topic_difficulty
-    elif (topic_name == "Zbrajanje i oduzimanje"):
+    elif (topic.name == "Zbrajanje i oduzimanje"):
         student.difficulty_zbrajanje = topic_difficulty
          
     #apply
