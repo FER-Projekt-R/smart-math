@@ -1,5 +1,6 @@
 import socketio
 from fastapi import FastAPI
+import os
 from fastapi.middleware.cors import CORSMiddleware
 
 from .routers import health, ml_feedback, ml_predict, test_db
@@ -17,6 +18,7 @@ sio = socketio.AsyncServer(
     cors_allowed_origins=[
         "http://localhost:3000",
         "http://127.0.0.1:3000",
+        "https://smart-math-phi.vercel.app",
     ],
 )
 
@@ -27,6 +29,7 @@ fastapi_app.add_middleware(
     allow_origins=[
         "http://localhost:3000",
         "http://127.0.0.1:3000",
+        "https://smart-math-phi.vercel.app",
     ],
     allow_credentials=True,
     allow_methods=["*"],

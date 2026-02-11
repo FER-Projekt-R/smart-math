@@ -75,6 +75,46 @@ body {
     border-width: 3px;
 }
 
+/* Numeric keyboard */
+
+.numeric-keyboard {
+    width: 100%;
+}
+
+.num-key {
+    background: var(--card-bg);
+    border: 2px solid var(--card-border);
+    color: var(--foreground);
+    font-weight: 700;
+    font-size: 1.25rem;
+    padding: 0.9rem 0;
+    border-radius: 1rem;
+    transition: all 0.15s ease;
+}
+
+.num-key:hover {
+    background: var(--primary);
+    color: white;
+    border-color: var(--primary);
+    transform: scale(1.05);
+}
+
+.num-key:active {
+    transform: scale(0.95);
+}
+
+.num-key-secondary {
+    background: transparent;
+    border-color: var(--primary);
+    color: var(--primary);
+}
+
+.num-key-secondary:hover {
+    background: var(--primary);
+    color: white;
+}
+
+
 /* Password slot animation */
 @keyframes pop {
     0% {

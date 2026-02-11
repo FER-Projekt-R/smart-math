@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from ..db import get_db
 from ..models.classroom import Classroom
+from ..models.student_stats import StudentStats
 from ..models.user_classroom import user_classroom
 from ..models.users import User
 from ..routers.auth import get_current_user
@@ -281,10 +282,12 @@ def get_classroom_students(
     return [{"id": str(s.id), "username": s.username, "level": int(s.current_difficulty)}for s in students]
 
 
+from sqlalchemy.orm import aliased
+from sqlalchemy import desc
+
 @router.get(
     "/{classroom_id}/students",
     summary="Get all students in a classroom (teacher only, by classroom_id)",
-    response_model=List[StudentOut],
 )
 def get_students_in_classroom_by_id(
     classroom_id: str,
@@ -296,18 +299,40 @@ def get_students_in_classroom_by_id(
 
     classroom = (
         db.query(Classroom)
-        .filter(Classroom.id == classroom_id, Classroom.teacher_id == current_user.id)
+        .filter(
+            Classroom.id == classroom_id,
+            Classroom.teacher_id == current_user.id
+        )
         .first()
     )
     if not classroom:
         raise HTTPException(status_code=404, detail="No such classroom.")
 
     students = (
-        db.query(User)
-        .join(user_classroom, user_classroom.c.user_id == User.id)
-        .filter(user_classroom.c.class_id == classroom.id, User.role == "student")
+        db.query(User, StudentStats)
+        .join(
+            user_classroom,
+            user_classroom.c.user_id == User.id
+        )
+        .outerjoin(   # OUTER JOIN da dobijemo i one bez stats
+            StudentStats,
+            StudentStats.user_id == User.id
+        )
+        .filter(
+            user_classroom.c.class_id == classroom.id,
+            User.role == "student"
+        )
         .order_by(User.username.asc())
         .all()
     )
 
-    return [{"id": str(s.id), "username": s.username, "level": int(s.current_difficulty)}for s in students]
+    return [
+        {
+            "id": str(user.id),
+            "username": user.username,
+            "level": int(user.current_difficulty),
+            "xp": int(stats.xp) if stats and stats.xp is not None else 0,
+        }
+        for user, stats in students
+    ]
+

@@ -19,6 +19,7 @@ interface Student {
     id: string;
     username: string;
     level: number;
+    xp: number;
 }
 
 interface Topic {
@@ -82,6 +83,7 @@ export default function TeacherDashboard() {
         try {
             const data = await api.get<Student[]>(`/classroom/${classroomId}/students`);
             setStudents(data);
+            console.log(data);
         } catch (err) {
             setStudentsError('Nije moguće učitati učenike');
             console.error(err);
@@ -304,6 +306,9 @@ export default function TeacherDashboard() {
                                                             {s.username}
                                                             <span className="text-xs px-2 py-1 rounded-full bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300">
                                                                 Level {Number.isFinite(s.level) ? s.level : 0}
+                                                            </span>
+                                                            <span className="text-xs px-2 py-1 rounded-full bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300 font-semibold">
+                                                                ⭐ {Number.isInteger(s.xp) ? s.xp : 0} XP
                                                             </span>
                                                         </span>
                                                         <button

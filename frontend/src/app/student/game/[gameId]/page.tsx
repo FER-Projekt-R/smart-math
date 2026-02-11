@@ -146,7 +146,7 @@ export default function StudentGamePage() {
         const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
         if (!token) return;
         try {
-            const res = await fetch('http://localhost:8000/stats/my-stats', {
+            const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/stats/my-stats`, {
                 headers: { Authorization: `Bearer ${token}` },
             });
             if (!res.ok) return;
@@ -568,6 +568,22 @@ export default function StudentGamePage() {
         }
     };
 
+    const handleNumberClick = (value: string) => {
+        if (hasSubmitted) return;
+        setAnswer((prev) => prev + value);
+    };
+
+    const handleBackspace = () => {
+        if (hasSubmitted) return;
+        setAnswer((prev) => prev.slice(0, -1));
+    };
+
+    const handleClear = () => {
+        if (hasSubmitted) return;
+        setAnswer('');
+    };
+
+
     const handleLeaveGame = () => {
         // Leave the current game without logging out.
         disconnectSocket(); // triggers backend disconnect -> deactivates player
@@ -739,19 +755,54 @@ export default function StudentGamePage() {
                         <div className="mb-4">
                             <input
                                 ref={answerInputRef}
-                                autoFocus
                                 value={answer}
-                                onChange={(e) => setAnswer(e.target.value)}
-                                onKeyDown={(e) => {
-                                    if ('isComposing' in (e.nativeEvent as any) && (e.nativeEvent as any).isComposing) return;
-                                    if (e.key === 'Enter') {
-                                        e.preventDefault();
-                                        void handleAttempt('enter');
-                                    }
-                                }}
-                                className="w-full px-4 py-3 rounded-xl border bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 outline-none"
-                                placeholder="Upiši odgovor…"
+                                readOnly
+                                inputMode="none"
+                                className="w-full px-4 py-3 rounded-xl border bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 outline-none cursor-default"
+                                placeholder="Unesi broj klikom na tipkovnicu ispod…"
                             />
+
+                            {currentQuestion.type === 'num' && (
+                                <div className="numeric-keyboard mt-4">
+                                    <div className="grid grid-cols-3 gap-3">
+                                        {[1,2,3,4,5,6,7,8,9].map((num) => (
+                                            <button
+                                                key={num}
+                                                type="button"
+                                                onClick={() => handleNumberClick(String(num))}
+                                                className="num-key"
+                                            >
+                                                {num}
+                                            </button>
+                                        ))}
+
+                                        <button
+                                            type="button"
+                                            onClick={handleClear}
+                                            className="num-key num-key-secondary"
+                                        >
+                                            C
+                                        </button>
+
+                                        <button
+                                            type="button"
+                                            onClick={() => handleNumberClick('0')}
+                                            className="num-key"
+                                        >
+                                            0
+                                        </button>
+
+                                        <button
+                                            type="button"
+                                            onClick={handleBackspace}
+                                            className="num-key num-key-secondary"
+                                        >
+                                            ⌫
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+
                         </div>
 
                         <div className="flex flex-col sm:flex-row gap-3">
