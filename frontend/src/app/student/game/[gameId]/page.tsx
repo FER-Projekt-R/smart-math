@@ -356,7 +356,8 @@ export default function StudentGamePage() {
                 accuracy,
                 avg_time_secs: avgTimeSecs,
                 hints: totalHints,
-                xp: xp
+                xp: xp,
+                selectedTopic: { topic_id: payload?.topic_id }
             };
 
             dlog('emit finish_round', finishPayload);
@@ -395,10 +396,10 @@ export default function StudentGamePage() {
 
     const buildSubmitPayload = (overrides?: Record<string, unknown>) => {
         const isCorrectNow = computeIsCorrect();
-        const studentLevel =
+        /*const studentLevel =
             user && user.role === 'student'
                 ? (xp ? Math.max(1, Math.floor(xp / 100)) : null)
-                : null;
+                : null;*/
         return {
             game_id: gameId,
             round_id: String(payload?.round_id ?? ''),
@@ -406,7 +407,7 @@ export default function StudentGamePage() {
             question_index: questionIndex,
             question_difficulty: currentQuestion?.difficulty ?? null,
             question_text: String(currentQuestion?.question ?? '').slice(0, 240),
-            student_level: studentLevel,
+            // student_level: studentLevel,
             answer_value: String(answer ?? '').trim().slice(0, 200),
             hints_used: hintClicksThisQuestion,
             time_spent_secs: computeTimeSpentSecs(),

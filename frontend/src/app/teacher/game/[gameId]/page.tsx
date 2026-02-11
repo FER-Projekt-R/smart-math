@@ -134,7 +134,7 @@ export default function TeacherGamePage() {
             if (Array.isArray(data?.playersDetailed)) {
                 const mapped = data.playersDetailed
                     .filter((p) => p && typeof p === 'object')
-                    .map((p: any) => ({
+                    /*.map((p: any) => ({
                         user_id: String(p.user_id ?? ''),
                         username: String(p.username ?? ''),
                         level: Number(p.level ?? 1),
@@ -145,7 +145,24 @@ export default function TeacherGamePage() {
                         avg_time_secs: typeof p.avg_time_secs === 'number' ? p.avg_time_secs : null,
                         hints_used: typeof p.hints_used === 'number' ? p.hints_used : null,
                         last_recommendation: (p?.last_recommendation ?? p?.lastRecommendation ?? null) as any,
-                    }))
+                    }))*/
+                   .map((p: any) => {
+                        const lvl = getLevelForTopic(p);
+
+                        return {
+                            user_id: String(p.user_id ?? ''),
+                            username: String(p.username ?? ''),
+                            level: lvl.current,
+                            previous_level: lvl.previous,
+                            xp: Number(p.xp ?? 0),
+                            rank: Number(p.rank ?? 0),
+                            accuracy: typeof p.accuracy === 'number' ? p.accuracy : null,
+                            avg_time_secs: typeof p.avg_time_secs === 'number' ? p.avg_time_secs : null,
+                            hints_used: typeof p.hints_used === 'number' ? p.hints_used : null,
+                            last_recommendation: (p?.last_recommendation ?? p?.lastRecommendation ?? null) as any,
+                        };
+                    })
+
                     .filter((p) => p.user_id && p.username);
                 setPlayersDetailed(mapped);
 
@@ -349,6 +366,50 @@ export default function TeacherGamePage() {
 
         return `Zbog ${parts.join(', ')} ${direction} smo razinu.`;
     };
+
+    // Helper funk
+    const getLevelForTopic = (
+        p: any
+    ): { current: number; previous: number } => {
+        const name = topicName?.toLowerCase() || '';
+
+        if (name.includes('brojevi')) {
+            return {
+                current: Number(p.level_brojevi_do_sto ?? 1),
+                previous: Number(
+                    p.previous_level_brojevi_do_sto ??
+                    p.level_brojevi_do_sto ??
+                    1
+                ),
+            };
+        }
+
+        if (name.includes('mno')) {
+            return {
+                current: Number(p.level_mnozenje_dijeljenje ?? 1),
+                previous: Number(
+                    p.previous_level_mnozenje_dijeljenje ??
+                    p.level_mnozenje_dijeljenje ??
+                    1
+                ),
+            };
+        }
+
+        if (name.includes('zbra')) {
+            return {
+                current: Number(p.level_zbrajanje_oduzimanje ?? 1),
+                previous: Number(
+                    p.previous_level_zbrajanje_oduzimanje ??
+                    p.level_zbrajanje_oduzimanje ??
+                    1
+                ),
+            };
+        }
+
+        return { current: 1, previous: 1 };
+    };
+
+
 
 
     return (
