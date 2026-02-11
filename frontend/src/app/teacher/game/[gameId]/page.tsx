@@ -350,6 +350,11 @@ export default function TeacherGamePage() {
         return `Zbog ${parts.join(', ')} ${direction} smo razinu.`;
     };
 
+    const sortedPlayers = [...playersDetailed].sort(
+        (a, b) => (b.xp ?? 0) - (a.xp ?? 0)
+    );
+
+
 
     return (
         <main className="min-h-screen p-4 sm:p-8 max-w-3xl mx-auto pb-12">
@@ -427,7 +432,7 @@ export default function TeacherGamePage() {
                                 </thead>
                                 <tbody className="divide-y" style={{ borderColor: 'var(--card-border)' }}>
                                     {(playersDetailed.length
-                                        ? playersDetailed
+                                        ? sortedPlayers
                                         : players.map((p) => ({
                                             user_id: p,
                                             username: p,
