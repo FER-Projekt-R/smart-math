@@ -359,12 +359,20 @@ async def emit_players(game_id):
             )
 
             for r in last_rounds:
+                prev = int(r.prev_difficulty) if r.prev_difficulty is not None else None
+
                 perf_map[str(r.user_id)] = {
-                    "previous_level": int(r.prev_difficulty) if r.prev_difficulty is not None else None,
+                    # 🔹 previous level po topicima (frontend filtrira)
+                    "previous_level_brojevi_do_sto": prev,
+                    "previous_level_mnozenje_dijeljenje": prev,
+                    "previous_level_zbrajanje_oduzimanje": prev,
+
+                    # 🔹 performance podaci
                     "accuracy": float(r.accuracy) if r.accuracy is not None else None,
                     "avg_time_secs": float(r.avg_time_secs) if r.avg_time_secs is not None else None,
                     "hints_used": int(r.hints) if r.hints is not None else 0,
                 }
+
 
 
         # Rank players by XP (desc). If stats row doesn't exist, treat as 0.
